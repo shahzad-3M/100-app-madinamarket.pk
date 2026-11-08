@@ -1,0 +1,6 @@
+{
+  "name": "100DAGAR - Credit & Debit Ledger",
+  "description": "Comprehensive credit & debit ledger for 100DAGAR featuring reports, scheduled WhatsApp reminders, auto monthly due notices, and recurring invoice generation.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
