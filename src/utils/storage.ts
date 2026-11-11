@@ -3,9 +3,13 @@ import {
   AttendanceRecord,
   BroadcastContact,
   BusinessProfile,
+  CategoryRecord,
   CODOrder,
   Customer,
   Employee,
+  Investor,
+  InvestorTransaction,
+  LoginFormConfig,
   LoginAuditRecord,
   LuckyDrawEvent,
   ProductBroadcast,
@@ -16,6 +20,7 @@ import {
   ReviewRewardSubmission,
   SavedBroadcastCampaign,
   Transaction,
+  UserAccount,
   UserRole,
   WhatsAppNotification,
 } from '../types';
@@ -23,9 +28,13 @@ import {
   defaultAttendance,
   defaultBroadcastContacts,
   defaultBusinessProfile,
+  defaultCategoryRecords,
   defaultCODOrders,
   defaultCustomers,
   defaultEmployees,
+  defaultInvestors,
+  defaultInvestorTransactions,
+  defaultLoginFormConfig,
   defaultLoginAuditLogs,
   defaultLuckyDrawEvents,
   defaultProductBroadcasts,
@@ -36,6 +45,7 @@ import {
   defaultReviewRewards,
   defaultSavedBroadcasts,
   defaultTransactions,
+  defaultUserAccounts,
   defaultWhatsAppNotifications,
 } from './defaultData';
 
@@ -60,6 +70,11 @@ const STORAGE_KEYS = {
   CURRENT_USER: '100dagar_current_user_v5',
   LOGIN_AUDITS: '100dagar_login_audits_v5',
   CATEGORIES: '100dagar_categories_v5',
+  CATEGORY_RECORDS: '100dagar_category_records_v5',
+  INVESTORS: '100dagar_investors_v5',
+  INVESTOR_TRANSACTIONS: '100dagar_investor_transactions_v5',
+  USER_ACCOUNTS: '100dagar_user_accounts_v5',
+  LOGIN_CONFIG: '100dagar_login_config_v5',
 };
 
 // Safe localStorage getter
@@ -118,6 +133,14 @@ export function saveProducts(products: ProductItem[]): void {
 }
 
 // Centrally Managed Product Categories
+export function getCategoryRecords(): CategoryRecord[] {
+  return loadFromStorage<CategoryRecord[]>(STORAGE_KEYS.CATEGORY_RECORDS, defaultCategoryRecords);
+}
+
+export function saveCategoryRecords(records: CategoryRecord[]): void {
+  saveToStorage(STORAGE_KEYS.CATEGORY_RECORDS, records);
+}
+
 export function getCategories(): string[] {
   const defaultCats = [
     'Cosmetics & Personal Care',
@@ -126,11 +149,14 @@ export function getCategories(): string[] {
     'Electronics & Gadgets',
     'Kitchen & Home',
     'Accessories',
+    'Upcoming / Viral Products',
   ];
+  const records = getCategoryRecords();
+  const recordNames = records.map((r) => r.name.trim()).filter(Boolean);
   const products = getProducts();
   const productCats = products.map((p) => p.category?.trim()).filter(Boolean);
   const stored = loadFromStorage<string[]>(STORAGE_KEYS.CATEGORIES, []);
-  const combined = Array.from(new Set([...defaultCats, ...stored, ...productCats]));
+  const combined = Array.from(new Set([...defaultCats, ...recordNames, ...stored, ...productCats]));
   return combined.sort((a, b) => a.localeCompare(b));
 }
 
@@ -139,17 +165,99 @@ export function saveCategories(categories: string[]): void {
   saveToStorage(STORAGE_KEYS.CATEGORIES, clean);
 }
 
-export function addCategory(newCategory: string): { categories: string[]; added: boolean } {
+export function addCategory(
+  newCategory: string,
+  parentCategoryId?: string,
+  isUpcoming: boolean = false
+): { categories: string[]; added: boolean; record?: CategoryRecord } {
   const trimmed = newCategory.trim();
   if (!trimmed) return { categories: getCategories(), added: false };
   const current = getCategories();
   const exists = current.some((c) => c.toLowerCase() === trimmed.toLowerCase());
+  
+  // Also register in CategoryRecord
+  const records = getCategoryRecords();
+  const recordExists = records.some((r) => r.name.toLowerCase() === trimmed.toLowerCase());
+  let newRecord: CategoryRecord | undefined = undefined;
+
+  if (!recordExists) {
+    newRecord = {
+      id: `cat_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+      name: trimmed,
+      parentCategoryId,
+      isUpcoming,
+      displayOrder: records.length + 1,
+    };
+    saveCategoryRecords([...records, newRecord]);
+  }
+
   if (!exists) {
     const updated = [...current, trimmed].sort((a, b) => a.localeCompare(b));
     saveCategories(updated);
-    return { categories: updated, added: true };
+    return { categories: updated, added: true, record: newRecord };
   }
-  return { categories: current, added: false };
+  return { categories: current, added: false, record: newRecord };
+}
+
+// Safely delete category if no active products are using it
+export function deleteCategory(categoryName: string): { success: boolean; message: string } {
+  const products = getProducts();
+  const inUse = products.some((p) => p.category?.trim().toLowerCase() === categoryName.trim().toLowerCase());
+  if (inUse) {
+    return {
+      success: false,
+      message: `Cannot delete '${categoryName}' because active catalog products belong to it. Reassign or delete products first.`,
+    };
+  }
+
+  const current = getCategories();
+  const updated = current.filter((c) => c.toLowerCase() !== categoryName.toLowerCase());
+  saveCategories(updated);
+
+  const records = getCategoryRecords();
+  const updatedRecords = records.filter((r) => r.name.toLowerCase() !== categoryName.toLowerCase());
+  saveCategoryRecords(updatedRecords);
+
+  return { success: true, message: `Category '${categoryName}' removed successfully.` };
+}
+
+// Category deduplication & normalization cleanup
+export function cleanupDuplicateCategories(): { mergedCount: number; remaining: string[] } {
+  const products = getProducts();
+  const cats = getCategories();
+  const map = new Map<string, string>(); // lowercase -> canonical name
+  let mergedCount = 0;
+
+  // Build canonical map
+  cats.forEach((cat) => {
+    const lower = cat.toLowerCase();
+    if (!map.has(lower)) {
+      map.set(lower, cat);
+    } else {
+      mergedCount++;
+    }
+  });
+
+  // Re-map any products referencing duplicate/differently-cased names
+  let productsChanged = false;
+  const updatedProducts = products.map((p) => {
+    if (p.category) {
+      const canonical = map.get(p.category.trim().toLowerCase());
+      if (canonical && canonical !== p.category) {
+        productsChanged = true;
+        return { ...p, category: canonical };
+      }
+    }
+    return p;
+  });
+
+  if (productsChanged) {
+    saveProducts(updatedProducts);
+  }
+
+  const remaining = Array.from(map.values()).sort((a, b) => a.localeCompare(b));
+  saveCategories(remaining);
+  return { mergedCount, remaining };
 }
 
 // Transactions
@@ -349,6 +457,106 @@ export function getOwnerPin(): string {
   return prof.adminPin || '580987';
 }
 
+// INVESTOR MANAGEMENT
+export function getInvestors(): Investor[] {
+  return loadFromStorage<Investor[]>(STORAGE_KEYS.INVESTORS, defaultInvestors);
+}
+
+export function saveInvestors(investors: Investor[]): void {
+  saveToStorage(STORAGE_KEYS.INVESTORS, investors);
+}
+
+export function getInvestorTransactions(): InvestorTransaction[] {
+  return loadFromStorage<InvestorTransaction[]>(STORAGE_KEYS.INVESTOR_TRANSACTIONS, defaultInvestorTransactions);
+}
+
+export function saveInvestorTransactions(txs: InvestorTransaction[]): void {
+  saveToStorage(STORAGE_KEYS.INVESTOR_TRANSACTIONS, txs);
+}
+
+// USER ACCOUNTS & CREDENTIAL MANAGEMENT
+export function getUserAccounts(): UserAccount[] {
+  return loadFromStorage<UserAccount[]>(STORAGE_KEYS.USER_ACCOUNTS, defaultUserAccounts);
+}
+
+export function saveUserAccounts(accounts: UserAccount[]): void {
+  saveToStorage(STORAGE_KEYS.USER_ACCOUNTS, accounts);
+}
+
+export function createUserAccount(user: Omit<UserAccount, 'id' | 'createdAt'>): UserAccount {
+  const newAccount: UserAccount = {
+    ...user,
+    id: `usr_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+    createdAt: new Date().toISOString(),
+    loginCount: 0,
+  };
+  const accounts = getUserAccounts();
+  saveUserAccounts([...accounts, newAccount]);
+  return newAccount;
+}
+
+export function updateUserAccount(id: string, updates: Partial<UserAccount>): boolean {
+  const accounts = getUserAccounts();
+  const index = accounts.findIndex((a) => a.id === id);
+  if (index === -1) return false;
+  accounts[index] = { ...accounts[index], ...updates };
+  saveUserAccounts(accounts);
+  return true;
+}
+
+// Administrator-assisted default password reset
+// Uses the last six digits of the registered mobile number as the suggested default password, as requested.
+// Marks mustChangePassword = true, forcing immediate password update on next login.
+export function resetUserPasswordToDefault(userId: string): { tempPin: string; account?: UserAccount } {
+  const accounts = getUserAccounts();
+  const target = accounts.find((a) => a.id === userId);
+  if (!target) return { tempPin: '123456' };
+
+  const tempPin = getDefaultPinForPhone(target.phone);
+  const updatedAccounts = accounts.map((a) => {
+    if (a.id === userId) {
+      return {
+        ...a,
+        passwordHash: tempPin,
+        passwordSalt: undefined,
+        mustChangePassword: true,
+        isTemporaryPassword: true,
+        suggestedDefaultPin: tempPin,
+      };
+    }
+    return a;
+  });
+
+  saveUserAccounts(updatedAccounts);
+
+  // If this user is also a customer, sync their customer pin
+  if (target.linkedCustomerId) {
+    updateCustomerPin(target.linkedCustomerId, tempPin);
+  }
+
+  // If reseller, sync reseller pin
+  if (target.linkedResellerCode) {
+    const res = getResellers().find((r) => r.referralCode === target.linkedResellerCode);
+    if (res) updateResellerPin(res.id, tempPin);
+  }
+
+  return { tempPin, account: updatedAccounts.find((a) => a.id === userId) };
+}
+
+// CONFIGURABLE LOGIN FORM CONFIGURATION
+export function getLoginFormConfig(): LoginFormConfig {
+  const prof = getBusinessProfile();
+  if (prof.loginFormConfig) return prof.loginFormConfig;
+  return loadFromStorage<LoginFormConfig>(STORAGE_KEYS.LOGIN_CONFIG, defaultLoginFormConfig);
+}
+
+export function saveLoginFormConfig(config: LoginFormConfig): void {
+  saveToStorage(STORAGE_KEYS.LOGIN_CONFIG, config);
+  const prof = getBusinessProfile();
+  prof.loginFormConfig = config;
+  saveBusinessProfile(prof);
+}
+
 
 // Calculate Customer Balance and Total Purchases from Transactions
 export function recalculateCustomerBalances(
@@ -483,6 +691,10 @@ export function exportAllDataJSON(): string {
     resellers: getResellers(),
     reviewRewards: getReviewRewards(),
     loginAudits: getLoginAudits(),
+    categoryRecords: getCategoryRecords(),
+    investors: getInvestors(),
+    investorTransactions: getInvestorTransactions(),
+    userAccounts: getUserAccounts(),
   };
   return JSON.stringify(data, null, 2);
 }
@@ -508,6 +720,10 @@ export function importAllDataJSON(jsonStr: string): boolean {
     if (parsed.resellers) saveResellers(parsed.resellers);
     if (parsed.reviewRewards) saveReviewRewards(parsed.reviewRewards);
     if (parsed.loginAudits) saveLoginAudits(parsed.loginAudits);
+    if (parsed.categoryRecords) saveCategoryRecords(parsed.categoryRecords);
+    if (parsed.investors) saveInvestors(parsed.investors);
+    if (parsed.investorTransactions) saveInvestorTransactions(parsed.investorTransactions);
+    if (parsed.userAccounts) saveUserAccounts(parsed.userAccounts);
     return true;
   } catch (e) {
     console.error('Failed to import JSON data', e);

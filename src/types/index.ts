@@ -91,6 +91,8 @@ export interface ProductItem {
   name: string;
   urduName?: string;
   category: string;
+  parentCategoryId?: string;
+  isUpcoming?: boolean; // When true: informational / viral product, purchasing disabled ("Coming Soon" badge)
   sku: string;
   costPrice: number; // For wholesale profit calculation (hidden in customer view)
   marketPrice: number; // Retail market price (strike-through)
@@ -101,7 +103,7 @@ export interface ProductItem {
   totalRevenue: number;
   totalProfit: number; // (ourPrice - costPrice) * salesCount (hidden in customer view)
   isWinningItem: boolean; // Winning item based on profit & velocity
-  badgeText?: string; // e.g. '-50%', 'HOT DEAL', 'TOP SELLER'
+  badgeText?: string; // e.g. '-50%', 'HOT DEAL', 'TOP SELLER', 'COMING SOON'
   imageUrl?: string;
   pictures?: string[]; // Multiple high-res images / gallery
   sizes?: string[]; // Available sizes or dimensions (e.g. Standard, Small, Medium, Large)
@@ -113,6 +115,8 @@ export interface ProductItem {
   sourceUrl?: string; // Imported from link
   description?: string;
   rating?: number;
+  investorId?: string; // Assigned investor
+  investorWhatsApp?: string; // Optional direct WhatsApp number for investor-supplied product
   createdAt: string;
 }
 
@@ -221,6 +225,20 @@ export interface ShippingPartnerSettings {
   autoSync: boolean;
 }
 
+export interface LoginFormConfig {
+  title: string;
+  description: string;
+  allowMobileLogin: boolean;
+  allowUsernameLogin: boolean;
+  allowEmailLogin: boolean;
+  showPasswordVisibilityToggle: boolean;
+  showRememberMe: boolean;
+  showForgotPasswordLink: boolean;
+  allowSelfRegistration: boolean;
+  supportContactNumber: string;
+  loginInstructions: string;
+}
+
 export interface BusinessProfile {
   name: string;
   tagline: string;
@@ -236,6 +254,7 @@ export interface BusinessProfile {
   autoSendEnabled: boolean;
   defaultPaymentTermsDays: number;
   adminPin?: string; // Owner Master PIN (default: '580987', resettable in settings)
+  loginFormConfig?: LoginFormConfig;
 }
 
 export interface ReminderTemplate {
@@ -364,7 +383,14 @@ export interface MonthlyCustomerStatement {
 }
 
 // USER ROLES & PERMISSIONS
-export type UserRole = 'admin' | 'manager' | 'reseller' | 'customer';
+export type UserRole =
+  | 'super_admin'
+  | 'admin'
+  | 'manager'
+  | 'staff'
+  | 'customer'
+  | 'investor'
+  | 'reseller';
 
 export interface AppUser {
   id: string;
@@ -372,10 +398,81 @@ export interface AppUser {
   urduName?: string;
   role: UserRole;
   phone: string;
+  email?: string;
   resellerCode?: string;
   customerId?: string;
+  investorId?: string;
   mustChangePassword?: boolean;
   hasDefaultPin?: boolean;
+}
+
+export interface UserAccount {
+  id: string;
+  username: string;
+  fullName: string;
+  urduName?: string;
+  phone: string;
+  email?: string;
+  role: UserRole;
+  status: 'active' | 'suspended' | 'inactive';
+  passwordHash?: string;
+  passwordSalt?: string;
+  mustChangePassword?: boolean;
+  isTemporaryPassword?: boolean;
+  suggestedDefaultPin?: string; // e.g. last 6 digits of mobile number for admin reference
+  linkedCustomerId?: string;
+  linkedInvestorId?: string;
+  linkedResellerCode?: string;
+  resetToken?: string;
+  resetTokenExpiresAt?: string;
+  lastLoginAt?: string;
+  loginCount?: number;
+  createdAt: string;
+}
+
+// INVESTOR MANAGEMENT MODEL
+export interface Investor {
+  id: string;
+  name: string;
+  urduName?: string;
+  phone: string;
+  whatsapp: string;
+  email?: string;
+  address?: string;
+  totalInvestment: number; // Capital invested in PKR
+  profitShareType: 'percentage' | 'fixed_per_unit';
+  profitShareValue: number; // e.g. 20% or Rs. 150 per unit
+  assignedProductIds: string[]; // List of product IDs funded by this investor
+  status: 'active' | 'inactive';
+  settledProfit: number; // Total profit paid out
+  notes?: string;
+  createdAt: string;
+}
+
+export interface InvestorTransaction {
+  id: string;
+  investorId: string;
+  date: string; // YYYY-MM-DD
+  type: 'investment_deposit' | 'profit_payout' | 'capital_withdrawal' | 'sale_share';
+  amount: number;
+  productId?: string;
+  productName?: string;
+  orderNumber?: string;
+  paymentMode?: PaymentMode;
+  notes?: string;
+  reference?: string;
+  createdAt: string;
+}
+
+// HIERARCHICAL & CLEAN CATEGORY MANAGEMENT
+export interface CategoryRecord {
+  id: string;
+  name: string;
+  urduName?: string;
+  parentCategoryId?: string; // If set, this is a subcategory
+  isUpcoming?: boolean; // When true: informational / viral category
+  description?: string;
+  displayOrder?: number;
 }
 
 // CASH ON DELIVERY (COD) ORDERS MANAGEMENT

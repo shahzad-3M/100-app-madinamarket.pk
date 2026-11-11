@@ -22,9 +22,12 @@ import {
   ExternalLink,
   Globe,
   Download,
+  Phone,
+  FolderTree,
 } from 'lucide-react';
 import { BusinessProfile, CartItem, Customer, ProductItem } from '../types';
 import { ProductDetailsModal } from './ProductDetailsModal';
+import { openWhatsAppDirect } from '../utils/whatsapp';
 
 interface StoreCatalogViewProps {
   products: ProductItem[];
@@ -41,6 +44,7 @@ interface StoreCatalogViewProps {
   selectedCategory: string;
   onCategoryChange: (cat: string) => void;
   onOpenImportModal?: () => void;
+  onOpenCategoryModal?: () => void;
   isCustomerView?: boolean;
   hideCostPrice?: boolean;
   userRole?: string;
@@ -61,6 +65,7 @@ export const StoreCatalogView: React.FC<StoreCatalogViewProps> = ({
   selectedCategory,
   onCategoryChange,
   onOpenImportModal,
+  onOpenCategoryModal,
   isCustomerView = false,
   hideCostPrice = false,
   userRole = 'customer',
@@ -70,6 +75,7 @@ export const StoreCatalogView: React.FC<StoreCatalogViewProps> = ({
   const [showWinningOnly, setShowWinningOnly] = useState(false);
   const [selectedDetailProduct, setSelectedDetailProduct] = useState<ProductItem | null>(null);
   const [isMobileFilterOpen, setIsMobileFilterOpen] = useState(false);
+  const [isConfirmClearCartOpen, setIsConfirmClearCartOpen] = useState(false);
 
   // DYNAMIC CATEGORIES: Strictly only categories present or imported from website (User directive)
   const dynamicCategories = useMemo(() => {
@@ -204,7 +210,20 @@ export const StoreCatalogView: React.FC<StoreCatalogViewProps> = ({
                 {showWinningOnly ? 'ON' : 'OFF'}
               </span>
             </button>
-          </div>
+          {/* Manage Categories (Admin Only) */}
+          {(userRole === 'super_admin' || userRole === 'admin') && onOpenCategoryModal && (
+            <button
+              type="button"
+              onClick={onOpenCategoryModal}
+              className="w-full flex items-center justify-between py-1.5 px-2.5 rounded-lg text-xs font-bold bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 text-slate-800 dark:text-slate-200 cursor-pointer"
+            >
+              <span className="flex items-center gap-1.5">
+                <FolderTree className="w-3.5 h-3.5 text-amber-500" />
+                Manage Categories
+              </span>
+              <span className="text-[10px] text-amber-600 dark:text-amber-400">Edit / Cleanup</span>
+            </button>
+          )}
 
           {/* Dynamic Categories List from products */}
           <nav className="space-y-0.5 text-xs">
@@ -373,11 +392,17 @@ export const StoreCatalogView: React.FC<StoreCatalogViewProps> = ({
                       </div>
                     )}
 
-                    {/* Green Discount Badge */}
+                    {/* Discount or Upcoming Badge */}
                     <div className="absolute top-1.5 left-1.5 sm:top-2 sm:left-2 flex flex-col gap-1 items-start">
-                      <span className="bg-emerald-600 text-white font-extrabold text-[9px] sm:text-[11px] px-1.5 sm:px-2 py-0.5 rounded shadow-xs">
-                        -{savingsPercent}%
-                      </span>
+                      {product.isUpcoming ? (
+                        <span className="bg-purple-600 text-white font-extrabold text-[9px] sm:text-[10px] px-1.5 sm:px-2 py-0.5 rounded shadow-xs">
+                          COMING SOON
+                        </span>
+                      ) : (
+                        <span className="bg-emerald-600 text-white font-extrabold text-[9px] sm:text-[11px] px-1.5 sm:px-2 py-0.5 rounded shadow-xs">
+                          -{savingsPercent}%
+                        </span>
+                      )}
                       {product.isWinningItem && (
                         <span className="bg-amber-500 text-slate-950 font-bold text-[8px] sm:text-[9px] px-1 sm:px-1.5 py-0.2 rounded shadow-xs flex items-center gap-0.5">
                           <Sparkles className="w-2 h-2 sm:w-2.5 sm:h-2.5" /> WINNING
@@ -388,11 +413,13 @@ export const StoreCatalogView: React.FC<StoreCatalogViewProps> = ({
                     {/* Stock Alert Badge */}
                     <div className="absolute top-1.5 right-1.5 sm:top-2 sm:right-2">
                       <span className={`text-[8px] sm:text-[10px] font-mono px-1.5 sm:px-2 py-0.5 rounded font-bold ${
-                        product.stockQty <= product.minStockAlert
+                        product.isUpcoming
+                          ? 'bg-purple-900/90 text-white'
+                          : product.stockQty <= product.minStockAlert
                           ? 'bg-red-500 text-white'
                           : 'bg-slate-900/80 text-white backdrop-blur-xs'
                       }`}>
-                        {product.stockQty} in stock
+                        {product.isUpcoming ? 'Under Transit' : `${product.stockQty} in stock`}
                       </span>
                     </div>
                   </div>
@@ -479,38 +506,90 @@ export const StoreCatalogView: React.FC<StoreCatalogViewProps> = ({
                       </a>
                     )}
 
-                    {/* Action Bar: Add to Cart / Sell */}
-                    <div className="pt-0.5 flex items-center justify-between gap-1.5">
-                      {inCart ? (
-                        <div className="w-full flex items-center justify-between bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700 rounded-lg p-0.5 sm:p-1">
+                    {/* Action Bar: Add to Cart / WhatsApp Ordering Options */}
+                    <div className="pt-0.5 space-y-1">
+                      {product.isUpcoming ? (
+                        <div className="flex items-center gap-1">
                           <button
-                            onClick={() => onUpdateCartQty(product.id, inCart.quantity - 1)}
-                            className="w-6 h-6 sm:w-7 sm:h-7 flex items-center justify-center bg-white dark:bg-slate-800 text-slate-800 dark:text-white rounded shadow-2xs hover:bg-slate-100 cursor-pointer"
+                            type="button"
+                            disabled
+                            className="flex-1 py-1.5 px-2 bg-slate-200 dark:bg-slate-800 text-slate-500 dark:text-slate-400 text-[10px] sm:text-[11px] font-bold rounded-lg cursor-not-allowed text-center truncate"
                           >
-                            <Minus className="w-3 h-3" />
+                            Coming Soon
                           </button>
-                          <span className="font-mono font-bold text-[11px] sm:text-xs text-amber-900 dark:text-amber-200">
-                            {inCart.quantity} in cart
-                          </span>
                           <button
-                            onClick={() => onUpdateCartQty(product.id, inCart.quantity + 1)}
-                            className="w-6 h-6 sm:w-7 sm:h-7 flex items-center justify-center bg-amber-500 text-slate-900 rounded shadow-2xs hover:bg-amber-400 cursor-pointer"
+                            type="button"
+                            onClick={() => {
+                              const text = `السلام علیکم! میں *${product.name}* کے بارے میں معلومات اور لاٹ بکنگ کروانا چاہتا ہوں۔`;
+                              openWhatsAppDirect(product.investorWhatsApp || profile.phone || '03125256266', text);
+                            }}
+                            className="p-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg cursor-pointer transition-colors shadow-2xs"
+                            title="Enquire on WhatsApp"
                           >
-                            <Plus className="w-3 h-3" />
+                            <Phone className="w-3.5 h-3.5" />
                           </button>
                         </div>
                       ) : (
-                        <button
-                          onClick={() => onAddToCart(product, 1)}
-                          className="w-full inline-flex items-center justify-center gap-1 py-1.5 sm:py-2 px-2.5 bg-slate-900 hover:bg-slate-800 dark:bg-amber-500 dark:text-slate-950 dark:hover:bg-amber-400 text-white text-[11px] sm:text-xs font-bold rounded-lg shadow-2xs transition-colors cursor-pointer"
-                        >
-                          <ShoppingBag className="w-3 h-3 sm:w-3.5 sm:h-3.5 shrink-0" />
-                          <span>Add to Cart</span>
-                        </button>
+                        <div className="flex items-center gap-1">
+                          {inCart ? (
+                            <div className="flex-1 flex items-center justify-between bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700 rounded-lg p-0.5">
+                              <button
+                                onClick={() => onUpdateCartQty(product.id, inCart.quantity - 1)}
+                                className="w-6 h-6 flex items-center justify-center bg-white dark:bg-slate-800 text-slate-800 dark:text-white rounded shadow-2xs hover:bg-slate-100 cursor-pointer"
+                              >
+                                <Minus className="w-3 h-3" />
+                              </button>
+                              <span className="font-mono font-bold text-[10px] sm:text-xs text-amber-900 dark:text-amber-200">
+                                {inCart.quantity} in cart
+                              </span>
+                              <button
+                                onClick={() => onUpdateCartQty(product.id, inCart.quantity + 1)}
+                                className="w-6 h-6 flex items-center justify-center bg-amber-500 text-slate-950 rounded shadow-2xs hover:bg-amber-400 cursor-pointer"
+                              >
+                                <Plus className="w-3 h-3" />
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              onClick={() => onAddToCart(product, 1)}
+                              className="flex-1 inline-flex items-center justify-center gap-1 py-1.5 sm:py-2 px-2 bg-slate-900 hover:bg-slate-800 dark:bg-amber-500 dark:text-slate-950 dark:hover:bg-amber-400 text-white text-[10px] sm:text-[11px] font-bold rounded-lg shadow-2xs transition-colors cursor-pointer truncate"
+                            >
+                              <ShoppingBag className="w-3 h-3 shrink-0" />
+                              <span className="truncate">Add to Cart</span>
+                            </button>
+                          )}
+
+                          {/* Direct WhatsApp Ordering Button */}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const text = `السلام علیکم! میں *${product.name}* کا آرڈر دینا چاہتا ہوں۔\nہول سیل قیمت: ${profile.currencySymbol}${product.ourPrice.toLocaleString('en-PK')}`;
+                              openWhatsAppDirect(profile.phone || '03125256266', text);
+                            }}
+                            className="p-1.5 sm:p-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg cursor-pointer transition-colors shrink-0 shadow-2xs"
+                            title="Order directly on WhatsApp"
+                          >
+                            <Phone className="w-3.5 h-3.5" />
+                          </button>
+
+                          {/* Investor WhatsApp ordering button if assigned */}
+                          {product.investorWhatsApp && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const text = `السلام علیکم! میں انویسٹر پراڈکٹ *${product.name}* کا آرڈر دینا چاہتا ہوں۔\nہول سیل قیمت: ${profile.currencySymbol}${product.ourPrice.toLocaleString('en-PK')}`;
+                                openWhatsAppDirect(product.investorWhatsApp!, text);
+                              }}
+                              className="p-1.5 sm:p-2 bg-teal-600 hover:bg-teal-500 text-white rounded-lg cursor-pointer transition-colors shrink-0 shadow-2xs"
+                              title={`Order via Investor WhatsApp (${product.investorWhatsApp})`}
+                            >
+                              <Tag className="w-3.5 h-3.5" />
+                            </button>
+                          )}
+                        </div>
                       )}
                     </div>
                   </div>
-                </div>
               );
             })}
           </div>

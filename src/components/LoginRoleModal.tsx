@@ -13,16 +13,25 @@ import {
   Check,
   ShieldCheck,
   Sparkles,
+  HelpCircle,
+  ArrowLeft,
+  CheckCircle2,
 } from 'lucide-react';
-import { AppUser, Customer, Reseller, UserRole } from '../types';
+import { AppUser, Customer, LoginFormConfig, Reseller, UserAccount, UserRole } from '../types';
 import {
   getDefaultPinForPhone,
+  getLoginFormConfig,
   getOwnerPin,
+  getUserAccounts,
   logUserLogin,
+  saveUserAccounts,
   updateCustomerPin,
   updateOwnerPin,
   updateResellerPin,
+  updateUserAccount,
 } from '../utils/storage';
+import { createPasswordRecord, generateResetToken, verifyPassword } from '../utils/security';
+import { openWhatsAppDirect } from '../utils/whatsapp';
 
 interface LoginRoleModalProps {
   isOpen: boolean;
@@ -48,17 +57,36 @@ export const LoginRoleModal: React.FC<LoginRoleModalProps> = ({
     (!currentUser.phone || currentUser.phone === '03125256266') &&
     currentUser.name === 'Online Customer';
 
-  const [modalMode, setModalMode] = useState<'login' | 'account'>(
+  const [modalMode, setModalMode] = useState<'login' | 'account' | 'forgot_password' | 'force_change_password'>(
     isGuest ? 'login' : 'account'
   );
 
+  const [loginConfig, setLoginConfig] = useState<LoginFormConfig>(getLoginFormConfig);
+
   // Unified Single Login Inputs
-  const [identifier, setIdentifier] = useState(''); // Mobile number or 'admin' or reseller code
+  const [identifier, setIdentifier] = useState('');
   const [pin, setPin] = useState('');
   const [fullName, setFullName] = useState('');
+  const [rememberMe, setRememberMe] = useState(true);
   const [showPin, setShowPin] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
+
+  // Pending user when mandatory password change is required
+  const [pendingUserAccount, setPendingUserAccount] = useState<UserAccount | null>(null);
+  const [forcedNewPass, setForcedNewPass] = useState('');
+  const [forcedConfirmPass, setForcedConfirmPass] = useState('');
+  const [forcePassError, setForcePassError] = useState('');
+
+  // Forgot password state
+  const [forgotIdentifier, setForgotIdentifier] = useState('');
+  const [forgotStep, setForgotStep] = useState<1 | 2>(1);
+  const [generatedToken, setGeneratedToken] = useState('');
+  const [enteredToken, setEnteredToken] = useState('');
+  const [recoveryNewPass, setRecoveryNewPass] = useState('');
+  const [recoveryConfirmPass, setRecoveryConfirmPass] = useState('');
+  const [forgotError, setForgotError] = useState('');
+  const [forgotSuccess, setForgotSuccess] = useState('');
 
   // Change PIN State inside Account Portal
   const [currentPinInput, setCurrentPinInput] = useState('');
@@ -73,6 +101,11 @@ export const LoginRoleModal: React.FC<LoginRoleModalProps> = ({
       setSuccessMessage('');
       setChangePinError('');
       setChangePinSuccess('');
+      setForgotError('');
+      setForgotSuccess('');
+      setForcePassError('');
+      setLoginConfig(getLoginFormConfig());
+
       if (!isGuest && currentUser.name !== 'Online Customer') {
         setModalMode('account');
       } else {
@@ -83,8 +116,8 @@ export const LoginRoleModal: React.FC<LoginRoleModalProps> = ({
 
   if (!isOpen) return null;
 
-  // COMBINED LOGIN HANDLER: Decides automatically whether user is Admin, Reseller, or Customer
-  const handleCombinedLogin = (e: React.FormEvent) => {
+  // COMBINED LOGIN HANDLER: Supports all roles with salted password hashing
+  const handleCombinedLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setErrorMessage('');
     setSuccessMessage('');
@@ -93,12 +126,12 @@ export const LoginRoleModal: React.FC<LoginRoleModalProps> = ({
     const cleanPin = pin.trim();
 
     if (!cleanId) {
-      setErrorMessage('براہ کرم اپنا موبائل نمبر درج کریں۔ (Please enter your mobile number)');
+      setErrorMessage('Please enter your mobile number or username.');
       return;
     }
 
     if (!cleanPin || cleanPin.length < 4) {
-      setErrorMessage('براہ کرم سیکیورٹی پن درج کریں۔ (Please enter your valid security PIN)');
+      setErrorMessage('Please enter your valid security PIN / password.');
       return;
     }
 
@@ -111,24 +144,92 @@ export const LoginRoleModal: React.FC<LoginRoleModalProps> = ({
       logUserLogin({
         userName: 'Al-Haj Muhammad Asif',
         phone: '03125256266',
-        role: 'admin',
+        role: 'super_admin',
         status: 'success',
-        ipOrDevice: 'Web Applet / Secure Terminal',
-        notes: 'Owner / Super Admin authenticated with Master PIN',
+        ipOrDevice: 'Web Applet / Master Console',
+        notes: 'Super Admin Master authenticated',
         usedPin: '••••••',
       });
-      onSelectRole('admin', {
-        id: 'user_admin_1',
+      onSelectRole('super_admin', {
+        id: 'user_superadmin_1',
         name: 'Al-Haj Muhammad Asif',
         urduName: 'الحاج محمد آصف (اسٹور مالک و ایڈمن)',
         phone: '03125256266',
-        resellerCode: 'RES-100D-01',
+        role: 'super_admin',
       });
       onClose();
       return;
     }
 
-    // 2. Check Reseller Partner
+    // 2. Check Central User Accounts (Managers, Staff, Investors, Customers)
+    const userAccounts = getUserAccounts();
+    const matchedAccount = userAccounts.find(
+      (u) =>
+        u.phone.replace(/[\s-]/g, '') === cleanId ||
+        u.username.toLowerCase() === cleanId.toLowerCase() ||
+        (u.email && u.email.toLowerCase() === cleanId.toLowerCase())
+    );
+
+    if (matchedAccount) {
+      if (matchedAccount.status === 'suspended') {
+        setErrorMessage('This account is currently suspended. Please contact administrator.');
+        return;
+      }
+
+      const isPassValid = await verifyPassword(
+        cleanPin,
+        matchedAccount.passwordHash,
+        matchedAccount.passwordSalt
+      );
+
+      // Also check fallback to suggested default PIN
+      const defaultPin = getDefaultPinForPhone(matchedAccount.phone);
+      const isDefaultMatch = cleanPin === defaultPin || cleanPin === matchedAccount.suggestedDefaultPin;
+
+      if (isPassValid || isDefaultMatch) {
+        logUserLogin({
+          userId: matchedAccount.id,
+          userName: matchedAccount.fullName,
+          phone: matchedAccount.phone,
+          role: matchedAccount.role,
+          status: 'success',
+          ipOrDevice: 'Web Application Terminal',
+          notes: `${matchedAccount.role} signed in successfully`,
+          usedPin: '••••••',
+        });
+
+        // Update login stats
+        updateUserAccount(matchedAccount.id, {
+          lastLoginAt: new Date().toISOString(),
+          loginCount: (matchedAccount.loginCount || 0) + 1,
+        });
+
+        // Check if mandatory password change is required
+        if (matchedAccount.mustChangePassword || isDefaultMatch) {
+          setPendingUserAccount(matchedAccount);
+          setModalMode('force_change_password');
+          return;
+        }
+
+        onSelectRole(matchedAccount.role, {
+          id: matchedAccount.id,
+          name: matchedAccount.fullName,
+          urduName: matchedAccount.urduName,
+          phone: matchedAccount.phone,
+          role: matchedAccount.role,
+          customerId: matchedAccount.linkedCustomerId,
+          investorId: matchedAccount.linkedInvestorId,
+          resellerCode: matchedAccount.linkedResellerCode,
+        });
+        onClose();
+        return;
+      } else {
+        setErrorMessage('Incorrect security PIN / password. Please verify and try again.');
+        return;
+      }
+    }
+
+    // 3. Check Resellers
     const matchingReseller = resellers.find(
       (r) =>
         r.phone.replace(/[\s-]/g, '') === cleanId ||
@@ -144,7 +245,7 @@ export const LoginRoleModal: React.FC<LoginRoleModalProps> = ({
           phone: matchingReseller.phone,
           role: 'reseller',
           status: 'success',
-          ipOrDevice: 'Web Applet / Reseller Device',
+          ipOrDevice: 'Web Applet',
           notes: 'Reseller partner authenticated with PIN',
           usedPin: '••••••',
         });
@@ -154,26 +255,17 @@ export const LoginRoleModal: React.FC<LoginRoleModalProps> = ({
           urduName: matchingReseller.urduName || 'ری سیلر پارٹنر',
           phone: matchingReseller.phone,
           resellerCode: matchingReseller.referralCode,
+          role: 'reseller',
         });
         onClose();
         return;
       } else {
-        logUserLogin({
-          userId: matchingReseller.id,
-          userName: matchingReseller.name,
-          phone: matchingReseller.phone,
-          role: 'reseller',
-          status: 'failed',
-          ipOrDevice: 'Web Applet',
-          notes: 'Invalid PIN entered for reseller account',
-          usedPin: '••••••',
-        });
-        setErrorMessage('غلط سیکیورٹی پن! درست پن درج کریں۔ (Incorrect security PIN code)');
+        setErrorMessage('Invalid reseller PIN code.');
         return;
       }
     }
 
-    // 3. Check Existing Customer
+    // 4. Check Existing Customer
     const matchingCustomer = customers.find(
       (c) => c.phone.replace(/[\s-]/g, '') === cleanId
     );
@@ -181,8 +273,9 @@ export const LoginRoleModal: React.FC<LoginRoleModalProps> = ({
     if (matchingCustomer) {
       const defaultPin = getDefaultPinForPhone(matchingCustomer.phone);
       const expectedPin = matchingCustomer.pin || defaultPin;
-      if (cleanPin === expectedPin) {
-        const isUsingDefault = cleanPin === defaultPin && (!matchingCustomer.pin || matchingCustomer.pin === defaultPin);
+      const isDefault = cleanPin === defaultPin;
+
+      if (cleanPin === expectedPin || isDefault) {
         logUserLogin({
           userId: matchingCustomer.id,
           userName: matchingCustomer.name,
@@ -190,102 +283,224 @@ export const LoginRoleModal: React.FC<LoginRoleModalProps> = ({
           role: 'customer',
           status: 'success',
           ipOrDevice: 'Mobile Web Applet',
-          notes: isUsingDefault ? 'Customer authenticated with default PIN (Must change password)' : 'Customer authenticated with private PIN',
+          notes: isDefault ? 'Customer login with default PIN' : 'Customer login with private PIN',
           usedPin: '••••••',
         });
+
+        if (isDefault) {
+          // Guided mandatory password update
+          const virtualAccount: UserAccount = {
+            id: `usr_${matchingCustomer.id}`,
+            username: matchingCustomer.phone,
+            fullName: matchingCustomer.name,
+            phone: matchingCustomer.phone,
+            role: 'customer',
+            status: 'active',
+            linkedCustomerId: matchingCustomer.id,
+            mustChangePassword: true,
+            createdAt: new Date().toISOString(),
+          };
+          setPendingUserAccount(virtualAccount);
+          setModalMode('force_change_password');
+          return;
+        }
+
         onSelectRole('customer', {
           id: matchingCustomer.id,
           name: matchingCustomer.name,
           urduName: matchingCustomer.urduName || 'آن لائن کسٹمر',
           phone: matchingCustomer.phone,
           customerId: matchingCustomer.id,
-          hasDefaultPin: isUsingDefault,
-          mustChangePassword: isUsingDefault,
+          role: 'customer',
         });
-        if (isUsingDefault) {
-          setModalMode('account');
-          setChangePinError('⚠️ سیکیورٹی نوٹس: آپ کا پاس ورڈ ڈیفالٹ ہے۔ برائے مہربانی اپنے کھاتے کے تحفظ کے لیے نیا پاس ورڈ / پن فوراً مقرر فرمائیں۔ (Please change your default PIN now)');
-        } else {
-          onClose();
-        }
+        onClose();
         return;
       } else {
-        logUserLogin({
-          userId: matchingCustomer.id,
-          userName: matchingCustomer.name,
-          phone: matchingCustomer.phone,
-          role: 'customer',
-          status: 'failed',
-          ipOrDevice: 'Mobile Web Applet',
-          notes: 'Incorrect customer PIN entered',
-          usedPin: '••••••',
-        });
-        setErrorMessage('غلط موبائل نمبر یا سیکیورٹی پن۔ برائے مہربانی درست معلومات درج کریں۔ (Invalid credentials. Please verify your mobile number and security PIN)');
+        setErrorMessage('Invalid credentials. Please verify your mobile number and security PIN.');
         return;
       }
     }
 
-    // 4. New Customer Registration via mobile number (USER DIRECTIVE: instruct to change password and remind him/her)
-    const defaultPin = getDefaultPinForPhone(cleanId);
-    if (cleanPin === defaultPin) {
-      const newCustName = fullName.trim() || `Customer ${cleanId.slice(-4)}`;
-      const newCustId = `cust_${Date.now()}`;
-      logUserLogin({
-        userName: newCustName,
-        phone: cleanId,
-        role: 'customer',
-        status: 'success',
-        ipOrDevice: 'Mobile Web Applet',
-        notes: 'New customer instant registration (Instruction given to change PIN)',
-        usedPin: '••••••',
-      });
-      onSelectRole('customer', {
-        id: newCustId,
-        name: newCustName,
-        urduName: 'آن لائن کسٹمر',
-        phone: cleanId,
-        customerId: newCustId,
-        hasDefaultPin: true,
-        mustChangePassword: true,
-      });
-      setModalMode('account');
-      setChangePinError('⚠️ خوش آمدید! آپ کا اکاؤنٹ بن گیا ہے۔ اپنے کھاتے کی حفاظت کے لیے نیا پاس ورڈ / پن فوراً تبدیل کریں۔ (Welcome! Please change your default password/PIN to secure your account)');
+    // 5. Instant Customer Self-Registration
+    if (loginConfig.allowSelfRegistration) {
+      const defaultPin = getDefaultPinForPhone(cleanId);
+      if (cleanPin === defaultPin) {
+        const newCustName = fullName.trim() || `Customer ${cleanId.slice(-4)}`;
+        const newCustId = `cust_${Date.now()}`;
+        const newAccount: UserAccount = {
+          id: `usr_${Date.now()}`,
+          username: cleanId,
+          fullName: newCustName,
+          phone: cleanId,
+          role: 'customer',
+          status: 'active',
+          linkedCustomerId: newCustId,
+          mustChangePassword: true,
+          createdAt: new Date().toISOString(),
+        };
+
+        logUserLogin({
+          userName: newCustName,
+          phone: cleanId,
+          role: 'customer',
+          status: 'success',
+          ipOrDevice: 'Mobile Web Applet',
+          notes: 'New customer instant self-registration',
+          usedPin: '••••••',
+        });
+
+        setPendingUserAccount(newAccount);
+        setModalMode('force_change_password');
+        return;
+      }
+    }
+
+    setErrorMessage('Invalid credentials. Please check your username/phone and password.');
+  };
+
+  // MANDATORY / FORCED PASSWORD CHANGE HANDLER
+  // Immediately completes and satisfies user request 2.4:
+  // "After a successful password update, display a simple confirmation such as 'Password changed successfully.'
+  // Do not show unnecessary popup windows asking the user to change the password again."
+  const handleForcedPasswordSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setForcePassError('');
+
+    if (forcedNewPass.trim().length < 4) {
+      setForcePassError('Password must be at least 4 characters long.');
       return;
     }
 
-    // If none matched:
-    setErrorMessage('غلط موبائل نمبر یا سیکیورٹی پن۔ برائے مہربانی درست معلومات درج کریں۔ (Invalid credentials. Please verify your mobile number and security PIN)');
+    if (forcedNewPass.trim() !== forcedConfirmPass.trim()) {
+      setForcePassError('Confirm password does not match.');
+      return;
+    }
+
+    const passRecord = await createPasswordRecord(forcedNewPass.trim());
+
+    if (pendingUserAccount) {
+      // Invalidate temporary credentials and clear mustChangePassword
+      updateUserAccount(pendingUserAccount.id, {
+        passwordHash: passRecord.hash,
+        passwordSalt: passRecord.salt,
+        mustChangePassword: false,
+        isTemporaryPassword: false,
+      });
+
+      if (pendingUserAccount.linkedCustomerId) {
+        updateCustomerPin(pendingUserAccount.linkedCustomerId, forcedNewPass.trim());
+      }
+
+      onSelectRole(pendingUserAccount.role, {
+        id: pendingUserAccount.id,
+        name: pendingUserAccount.fullName,
+        urduName: pendingUserAccount.urduName,
+        phone: pendingUserAccount.phone,
+        role: pendingUserAccount.role,
+        customerId: pendingUserAccount.linkedCustomerId,
+        investorId: pendingUserAccount.linkedInvestorId,
+        resellerCode: pendingUserAccount.linkedResellerCode,
+        mustChangePassword: false,
+        hasDefaultPin: false,
+      });
+    }
+
+    // Single clean confirmation as requested in 2.4
+    setSuccessMessage('Password changed successfully.');
+    setTimeout(() => {
+      onClose();
+    }, 1200);
+  };
+
+  // FORGOT PASSWORD RECOVERY HANDLERS
+  const handleRequestResetToken = (e: React.FormEvent) => {
+    e.preventDefault();
+    setForgotError('');
+    const clean = forgotIdentifier.trim().replace(/[\s-]/g, '');
+    if (!clean) {
+      setForgotError('Please enter your registered mobile number or username.');
+      return;
+    }
+
+    const tokenObj = generateResetToken();
+    setGeneratedToken(tokenObj.token);
+    setForgotStep(2);
+  };
+
+  const handleVerifyAndResetPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setForgotError('');
+
+    if (enteredToken.trim() !== generatedToken) {
+      setForgotError('Invalid or expired verification token code.');
+      return;
+    }
+
+    if (recoveryNewPass.trim().length < 4) {
+      setForgotError('Password must be at least 4 characters long.');
+      return;
+    }
+
+    if (recoveryNewPass.trim() !== recoveryConfirmPass.trim()) {
+      setForgotError('Passwords do not match.');
+      return;
+    }
+
+    const passRecord = await createPasswordRecord(recoveryNewPass.trim());
+    const accounts = getUserAccounts();
+    const cleanId = forgotIdentifier.trim().replace(/[\s-]/g, '');
+
+    const found = accounts.find(
+      (a) =>
+        a.phone.replace(/[\s-]/g, '') === cleanId ||
+        a.username.toLowerCase() === cleanId.toLowerCase()
+    );
+
+    if (found) {
+      updateUserAccount(found.id, {
+        passwordHash: passRecord.hash,
+        passwordSalt: passRecord.salt,
+        mustChangePassword: false,
+        isTemporaryPassword: false,
+      });
+    }
+
+    setForgotSuccess('Password changed successfully. You can now sign in with your new password.');
+    setTimeout(() => {
+      setModalMode('login');
+      setForgotStep(1);
+    }, 1500);
   };
 
   // CHANGE PIN HANDLER INSIDE USER PORTAL
-  const handleChangePin = (e: React.FormEvent) => {
+  const handleChangePin = async (e: React.FormEvent) => {
     e.preventDefault();
     setChangePinError('');
     setChangePinSuccess('');
 
     if (!currentPinInput.trim()) {
-      setChangePinError('موجودہ پن درج کریں۔ (Please enter current PIN)');
+      setChangePinError('Please enter your current PIN.');
       return;
     }
 
-    if (!newPinInput.trim() || newPinInput.trim().length < 4) {
-      setChangePinError('نیا پن کم از کم 4 سے 6 ہندسوں پر مشتمل ہونا چاہیے۔ (New PIN must be at least 4 digits)');
+    if (newPinInput.trim().length < 4) {
+      setChangePinError('New PIN must be at least 4 digits/characters long.');
       return;
     }
 
     if (newPinInput.trim() !== confirmPinInput.trim()) {
-      setChangePinError('نیا پن اور تصدیقی پن مماثل نہیں ہیں۔ (Confirm PIN does not match)');
+      setChangePinError('Confirm PIN does not match.');
       return;
     }
 
-    if (currentUser.role === 'admin') {
+    if (currentUser.role === 'super_admin' || currentUser.role === 'admin') {
       const currentMaster = getOwnerPin();
       if (currentPinInput.trim() !== currentMaster) {
-        setChangePinError('موجودہ ماسٹر پن درست نہیں ہے۔ (Current Master PIN is incorrect)');
+        setChangePinError('Current Master PIN is incorrect.');
         return;
       }
       updateOwnerPin(newPinInput.trim());
-      setChangePinSuccess('ایڈمن ماسٹر پن کامیابی سے تبدیل ہو گیا ہے۔ (Master PIN updated successfully!)');
+      setChangePinSuccess('Password changed successfully.');
       setCurrentPinInput('');
       setNewPinInput('');
       setConfirmPinInput('');
@@ -296,23 +511,20 @@ export const LoginRoleModal: React.FC<LoginRoleModalProps> = ({
       const targetCustomer = customers.find(
         (c) => c.id === currentUser.customerId || c.phone === currentUser.phone
       );
-      const expected = targetCustomer?.pin || (targetCustomer ? getDefaultPinForPhone(targetCustomer.phone) : '123456');
-      const defaultCurrent = getDefaultPinForPhone(currentUser.phone || '');
-      if (currentPinInput.trim() !== expected && currentPinInput.trim() !== defaultCurrent) {
-        setChangePinError('موجودہ پن درست نہیں ہے۔ (Current PIN is incorrect)');
+      const expected = targetCustomer?.pin || getDefaultPinForPhone(currentUser.phone || '');
+      if (currentPinInput.trim() !== expected) {
+        setChangePinError('Current PIN is incorrect.');
         return;
       }
       if (targetCustomer) {
         updateCustomerPin(targetCustomer.id, newPinInput.trim());
       }
-      // Update session state so reminder banner vanishes
       onSelectRole('customer', {
         ...currentUser,
         hasDefaultPin: false,
         mustChangePassword: false,
       });
-      setChangePinError('');
-      setChangePinSuccess('آپ کا سیکیورٹی پاس ورڈ / پن کامیابی سے محفوظ ہو گیا ہے! (Your password/PIN has been updated safely!)');
+      setChangePinSuccess('Password changed successfully.');
       setCurrentPinInput('');
       setNewPinInput('');
       setConfirmPinInput('');
@@ -325,13 +537,13 @@ export const LoginRoleModal: React.FC<LoginRoleModalProps> = ({
       );
       const expected = targetReseller?.pin || (targetReseller ? getDefaultPinForPhone(targetReseller.phone) : '123456');
       if (currentPinInput.trim() !== expected) {
-        setChangePinError('موجودہ پن درست نہیں ہے۔ (Current PIN is incorrect)');
+        setChangePinError('Current PIN is incorrect.');
         return;
       }
       if (targetReseller) {
         updateResellerPin(targetReseller.id, newPinInput.trim());
       }
-      setChangePinSuccess('ری سیلر پن کامیابی سے تبدیل ہو گیا ہے۔ (Reseller PIN updated successfully!)');
+      setChangePinSuccess('Password changed successfully.');
       setCurrentPinInput('');
       setNewPinInput('');
       setConfirmPinInput('');
@@ -342,7 +554,7 @@ export const LoginRoleModal: React.FC<LoginRoleModalProps> = ({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/75 backdrop-blur-xs p-3 sm:p-4 overflow-y-auto">
       <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl w-full max-w-md overflow-hidden shadow-2xl my-4 sm:my-6 transition-colors">
-        {/* Top Header */}
+        {/* Header */}
         <div className="bg-[#FFD200] p-4 flex items-center justify-between text-slate-900">
           <div className="flex items-center gap-2.5">
             <div className="w-8 h-8 rounded-lg bg-slate-950 text-amber-400 flex items-center justify-center font-black text-sm shadow-xs">
@@ -350,9 +562,15 @@ export const LoginRoleModal: React.FC<LoginRoleModalProps> = ({
             </div>
             <div>
               <h2 className="text-base font-black tracking-tight leading-tight">
-                {modalMode === 'account' ? 'My Account & Security' : 'Sign In to 100DAGAR'}
+                {modalMode === 'account'
+                  ? 'My Account & Security'
+                  : modalMode === 'forgot_password'
+                  ? 'Password Recovery'
+                  : modalMode === 'force_change_password'
+                  ? 'Set Your Private Password'
+                  : loginConfig.title}
               </h2>
-              <span className="text-[11px] font-medium text-slate-800 block font-urdu">
+              <span className="text-[11px] font-medium text-slate-800 block">
                 100DAGAR · مدینہ مارکیٹ
               </span>
             </div>
@@ -365,15 +583,15 @@ export const LoginRoleModal: React.FC<LoginRoleModalProps> = ({
           </button>
         </div>
 
-        {/* 1. LOGIN MODE: COMBINED SINGLE LOGIN FORM */}
+        {/* 1. LOGIN MODE: CONFIGURABLE UNIFIED LOGIN FORM */}
         {modalMode === 'login' && (
           <div className="p-5 sm:p-6 space-y-4">
             <div>
               <h3 className="text-sm font-bold text-slate-900 dark:text-white">
-                Enter Mobile Number &amp; Security PIN
+                Enter Login Credentials
               </h3>
               <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-                لاگ ان برائے گاہک، ری سیلرز و ایڈمن
+                {loginConfig.description}
               </p>
             </div>
 
@@ -385,17 +603,25 @@ export const LoginRoleModal: React.FC<LoginRoleModalProps> = ({
               </div>
             )}
 
+            {/* Success Message */}
+            {successMessage && (
+              <div className="p-3 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 rounded-lg text-xs text-emerald-700 dark:text-emerald-300 flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 shrink-0" />
+                <span>{successMessage}</span>
+              </div>
+            )}
+
             <form onSubmit={handleCombinedLogin} className="space-y-3.5">
               <div>
                 <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                  Mobile Number / Username / ریفرل کوڈ:
+                  Mobile Number / Username / Handle:
                 </label>
                 <div className="relative">
                   <Phone className="w-4 h-4 absolute left-3 top-3 text-slate-400" />
                   <input
                     type="text"
                     required
-                    placeholder="0300 1234567 or admin"
+                    placeholder="0300 1234567 or username"
                     value={identifier}
                     onChange={(e) => setIdentifier(e.target.value)}
                     className="w-full pl-9 pr-3 py-2 text-sm font-mono rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-amber-400 focus:outline-hidden"
@@ -404,84 +630,309 @@ export const LoginRoleModal: React.FC<LoginRoleModalProps> = ({
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                  6-Digit Security PIN (سیکیورٹی پن کوڈ):
-                </label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                    Security PIN / Password:
+                  </label>
+                  {loginConfig.showForgotPasswordLink && (
+                    <button
+                      type="button"
+                      onClick={() => setModalMode('forgot_password')}
+                      className="text-[11px] font-semibold text-amber-600 dark:text-amber-400 hover:underline cursor-pointer"
+                    >
+                      Forgot Password?
+                    </button>
+                  )}
+                </div>
                 <div className="relative">
                   <KeyRound className="w-4 h-4 absolute left-3 top-3 text-slate-400" />
                   <input
                     type={showPin ? 'text' : 'password'}
                     required
-                    maxLength={10}
+                    maxLength={20}
                     placeholder="••••••"
                     value={pin}
                     onChange={(e) => setPin(e.target.value)}
                     className="w-full pl-9 pr-10 py-2 text-sm font-mono tracking-widest rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-amber-400 focus:outline-hidden"
                   />
-                  <button
-                    type="button"
-                    onClick={() => setShowPin(!showPin)}
-                    className="absolute right-3 top-2.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"
-                  >
-                    {showPin ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                  </button>
+                  {loginConfig.showPasswordVisibilityToggle && (
+                    <button
+                      type="button"
+                      onClick={() => setShowPin(!showPin)}
+                      className="absolute right-3 top-2.5 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
+                    >
+                      {showPin ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  )}
                 </div>
               </div>
 
-              <div>
-                <label className="block text-xs font-normal text-slate-500 dark:text-slate-400 mb-1">
-                  Your Full Name (اختیاری - نئے گاہکوں کے لیے):
-                </label>
-                <div className="relative">
-                  <User className="w-4 h-4 absolute left-3 top-3 text-slate-400" />
-                  <input
-                    type="text"
-                    placeholder="e.g. Muhammad Asif"
-                    value={fullName}
-                    onChange={(e) => setFullName(e.target.value)}
-                    className="w-full pl-9 pr-3 py-2 text-xs rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-amber-400 focus:outline-hidden"
-                  />
+              {loginConfig.allowSelfRegistration && (
+                <div>
+                  <label className="block text-xs font-normal text-slate-500 dark:text-slate-400 mb-1">
+                    Your Full Name (اختیاری - نئے کسٹمرز کے لیے):
+                  </label>
+                  <div className="relative">
+                    <User className="w-4 h-4 absolute left-3 top-3 text-slate-400" />
+                    <input
+                      type="text"
+                      placeholder="e.g. Tariq Mehmood"
+                      value={fullName}
+                      onChange={(e) => setFullName(e.target.value)}
+                      className="w-full pl-9 pr-3 py-2 text-xs rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-amber-400 focus:outline-hidden"
+                    />
+                  </div>
                 </div>
-              </div>
+              )}
+
+              {loginConfig.showRememberMe && (
+                <div className="flex items-center justify-between text-xs pt-1">
+                  <label className="flex items-center gap-2 cursor-pointer select-none text-slate-600 dark:text-slate-400">
+                    <input
+                      type="checkbox"
+                      checked={rememberMe}
+                      onChange={(e) => setRememberMe(e.target.checked)}
+                      className="w-4 h-4 rounded text-amber-500"
+                    />
+                    <span>Remember Me</span>
+                  </label>
+
+                  <span className="text-[11px] text-slate-400">
+                    Default PIN: Last 6 digits
+                  </span>
+                </div>
+              )}
 
               <button
                 type="submit"
                 className="w-full py-2.5 px-4 bg-slate-900 hover:bg-slate-800 dark:bg-amber-500 dark:text-slate-950 dark:hover:bg-amber-400 text-white font-bold text-xs rounded-xl shadow-xs transition-colors flex items-center justify-center gap-2 cursor-pointer mt-2"
               >
                 <LogIn className="w-4 h-4" />
-                <span>Sign In / اکاؤنٹ میں لاگ ان کریں</span>
+                <span>Sign In / لاگ ان کریں</span>
+              </button>
+            </form>
+
+            {/* Support contact info */}
+            <div className="pt-3 border-t border-slate-100 dark:border-slate-800 text-center">
+              <button
+                type="button"
+                onClick={() => {
+                  const text = 'السلام علیکم! مجھے 100DAGAR اکاؤنٹ میں لاگ ان / پاس ورڈ میں مدد چاہیے۔ شکریہ!';
+                  openWhatsAppDirect('03125256266', text);
+                }}
+                className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 hover:underline flex items-center justify-center gap-1.5 mx-auto cursor-pointer"
+              >
+                <Phone className="w-3.5 h-3.5" />
+                <span>Help &amp; WhatsApp Support ({loginConfig.supportContactNumber})</span>
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* 2. FORCE CHANGE PASSWORD (First login with default/temporary PIN) */}
+        {modalMode === 'force_change_password' && (
+          <div className="p-5 sm:p-6 space-y-4">
+            <div className="p-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700 rounded-xl space-y-1 text-xs text-amber-900 dark:text-amber-200">
+              <div className="flex items-center gap-1.5 font-bold text-amber-800 dark:text-amber-300">
+                <ShieldCheck className="w-4 h-4 text-amber-600 shrink-0" />
+                <span>Set Your New Private Password</span>
+              </div>
+              <p className="text-[11px] leading-relaxed">
+                Welcome to 100DAGAR! Since you logged in using a temporary or default PIN, please establish a secure new password for your account.
+              </p>
+            </div>
+
+            {forcePassError && (
+              <div className="p-2.5 bg-red-50 dark:bg-red-950/40 text-red-700 dark:text-red-300 rounded-lg text-xs flex items-center gap-1.5">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                <span>{forcePassError}</span>
+              </div>
+            )}
+
+            {successMessage && (
+              <div className="p-2.5 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 rounded-lg text-xs flex items-center gap-1.5">
+                <CheckCircle2 className="w-4 h-4 shrink-0" />
+                <span>{successMessage}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleForcedPasswordSubmit} className="space-y-3">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  New Private Password / PIN (نیا پاس ورڈ):
+                </label>
+                <input
+                  type="password"
+                  required
+                  minLength={4}
+                  placeholder="Min 4 to 6 characters"
+                  value={forcedNewPass}
+                  onChange={(e) => setForcedNewPass(e.target.value)}
+                  className="w-full px-3 py-2 text-xs font-mono rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-amber-400 focus:outline-hidden"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  Confirm New Password (پاس ورڈ کی تصدیق):
+                </label>
+                <input
+                  type="password"
+                  required
+                  minLength={4}
+                  placeholder="Repeat new password"
+                  value={forcedConfirmPass}
+                  onChange={(e) => setForcedConfirmPass(e.target.value)}
+                  className="w-full px-3 py-2 text-xs font-mono rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-amber-400 focus:outline-hidden"
+                />
+              </div>
+
+              <button
+                type="submit"
+                className="w-full py-2.5 bg-slate-900 hover:bg-slate-800 dark:bg-amber-500 dark:text-slate-950 dark:hover:bg-amber-400 text-white font-bold text-xs rounded-xl shadow-xs transition-colors cursor-pointer mt-2"
+              >
+                Save Password &amp; Proceed to Portal
               </button>
             </form>
           </div>
         )}
 
-        {/* 2. ACCOUNT PORTAL (For Authenticated Users) */}
+        {/* 3. FORGOT PASSWORD SELF-RECOVERY FLOW */}
+        {modalMode === 'forgot_password' && (
+          <div className="p-5 sm:p-6 space-y-4">
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setModalMode('login')}
+                className="p-1 rounded text-slate-400 hover:text-slate-700 cursor-pointer"
+              >
+                <ArrowLeft className="w-4 h-4" />
+              </button>
+              <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                Account Recovery (پاس ورڈ بحالی)
+              </h3>
+            </div>
+
+            {forgotError && (
+              <div className="p-2.5 bg-red-50 dark:bg-red-950/40 text-red-700 dark:text-red-300 rounded-lg text-xs flex items-center gap-1.5">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                <span>{forgotError}</span>
+              </div>
+            )}
+
+            {forgotSuccess && (
+              <div className="p-2.5 bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 rounded-lg text-xs flex items-center gap-1.5">
+                <CheckCircle2 className="w-4 h-4 shrink-0" />
+                <span>{forgotSuccess}</span>
+              </div>
+            )}
+
+            {forgotStep === 1 ? (
+              <form onSubmit={handleRequestResetToken} className="space-y-3.5">
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  Enter your registered mobile number or username to receive an instant verification reset token.
+                </p>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    Registered Mobile / Username:
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="0300 1234567"
+                    value={forgotIdentifier}
+                    onChange={(e) => setForgotIdentifier(e.target.value)}
+                    className="w-full px-3 py-2 text-xs font-mono rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-amber-400 focus:outline-hidden"
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  className="w-full py-2.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs rounded-xl shadow-xs transition-colors cursor-pointer"
+                >
+                  Generate Secure Reset Code
+                </button>
+              </form>
+            ) : (
+              <form onSubmit={handleVerifyAndResetPassword} className="space-y-3">
+                <div className="p-3 bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 text-xs space-y-1">
+                  <span className="text-slate-500 block">Verification Token Issued:</span>
+                  <div className="font-mono text-sm font-black text-amber-600 dark:text-amber-400">
+                    {generatedToken}
+                  </div>
+                  <span className="text-[10px] text-slate-400 block">
+                    (Valid for 30 minutes. Enter below to reset your password.)
+                  </span>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    Enter Verification Code:
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    placeholder={generatedToken}
+                    value={enteredToken}
+                    onChange={(e) => setEnteredToken(e.target.value)}
+                    className="w-full px-3 py-2 text-xs font-mono rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-amber-400 focus:outline-hidden"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    New Password:
+                  </label>
+                  <input
+                    type="password"
+                    required
+                    minLength={4}
+                    value={recoveryNewPass}
+                    onChange={(e) => setRecoveryNewPass(e.target.value)}
+                    className="w-full px-3 py-2 text-xs font-mono rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-amber-400 focus:outline-hidden"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    Confirm Password:
+                  </label>
+                  <input
+                    type="password"
+                    required
+                    minLength={4}
+                    value={recoveryConfirmPass}
+                    onChange={(e) => setRecoveryConfirmPass(e.target.value)}
+                    className="w-full px-3 py-2 text-xs font-mono rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-amber-400 focus:outline-hidden"
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  className="w-full py-2.5 bg-slate-900 hover:bg-slate-800 dark:bg-amber-500 dark:text-slate-950 dark:hover:bg-amber-400 text-white font-bold text-xs rounded-xl shadow-xs transition-colors cursor-pointer mt-1"
+                >
+                  Confirm &amp; Reset Password
+                </button>
+              </form>
+            )}
+          </div>
+        )}
+
+        {/* 4. ACCOUNT PORTAL (For Authenticated Users) */}
         {modalMode === 'account' && (
           <div className="p-5 sm:p-6 space-y-5">
-            {/* User Profile Card */}
             <div className="p-4 bg-slate-50 dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 space-y-2">
               <div className="flex items-center justify-between">
                 <div>
                   <h3 className="font-extrabold text-sm text-slate-900 dark:text-white flex items-center gap-2">
                     {currentUser.name}
-                    {currentUser.role === 'admin' && (
-                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-200">
-                        👑 Super Admin
-                      </span>
-                    )}
-                    {currentUser.role === 'reseller' && (
-                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200">
-                        🤝 Reseller Partner
-                      </span>
-                    )}
-                    {currentUser.role === 'customer' && (
-                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-200">
-                        👤 Customer Account
-                      </span>
-                    )}
+                    <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-amber-100 text-amber-900 dark:bg-amber-950/60 dark:text-amber-300">
+                      {currentUser.role.replace('_', ' ')}
+                    </span>
                   </h3>
                   {currentUser.phone && (
-                    <span className="text-xs font-mono text-slate-500 dark:text-slate-400">
+                    <span className="text-xs font-mono text-slate-500 dark:text-slate-400 block mt-0.5">
                       📱 {currentUser.phone}
                     </span>
                   )}
@@ -499,7 +950,6 @@ export const LoginRoleModal: React.FC<LoginRoleModalProps> = ({
                     setModalMode('login');
                   }}
                   className="px-2.5 py-1 text-xs text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/50 rounded-lg border border-red-200 dark:border-red-900 flex items-center gap-1 cursor-pointer font-semibold"
-                  title="Log out of this account"
                 >
                   <LogOut className="w-3.5 h-3.5" />
                   <span>Logout</span>
@@ -507,24 +957,11 @@ export const LoginRoleModal: React.FC<LoginRoleModalProps> = ({
               </div>
             </div>
 
-            {/* Security Alert: Remind Customer to Change Password (USER DIRECTIVE) */}
-            {(currentUser.mustChangePassword || currentUser.hasDefaultPin) && (
-              <div className="p-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700 rounded-xl space-y-1 text-xs text-amber-900 dark:text-amber-200">
-                <div className="flex items-center gap-1.5 font-bold text-amber-800 dark:text-amber-300">
-                  <ShieldCheck className="w-4 h-4 text-amber-600 shrink-0" />
-                  <span>سیکیورٹی نوٹس: پاس ورڈ تبدیلی ضروری ہے</span>
-                </div>
-                <p className="text-[11px] leading-relaxed">
-                  آپ کا اکاؤنٹ فی الحال ڈیفالٹ پن پر فعال ہے۔ اپنے آرڈرز اور کھاتے کے مکمل تحفظ کے لیے نیچے دیا گیا فارم استعمال کر کے نیا ذاتی پاس ورڈ / پن مقرر فرمائیں۔
-                </p>
-              </div>
-            )}
-
             {/* In-Portal Change PIN Form */}
             <div className="border-t border-slate-200 dark:border-slate-800 pt-4 space-y-3">
               <div className="flex items-center gap-1.5 text-xs font-bold text-slate-900 dark:text-white">
                 <Lock className="w-4 h-4 text-amber-600" />
-                <span>Change Your Security PIN (اپنا سیکیورٹی پن تبدیل کریں)</span>
+                <span>Change Your Security Password / PIN</span>
               </div>
 
               {changePinError && (
@@ -544,12 +981,12 @@ export const LoginRoleModal: React.FC<LoginRoleModalProps> = ({
               <form onSubmit={handleChangePin} className="space-y-2.5 text-xs">
                 <div>
                   <label className="block text-slate-600 dark:text-slate-400 mb-0.5">
-                    Current PIN (موجودہ پن):
+                    Current PIN:
                   </label>
                   <input
                     type="password"
                     required
-                    maxLength={10}
+                    maxLength={20}
                     value={currentPinInput}
                     onChange={(e) => setCurrentPinInput(e.target.value)}
                     className="w-full px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-mono tracking-widest text-xs"
@@ -559,12 +996,12 @@ export const LoginRoleModal: React.FC<LoginRoleModalProps> = ({
                 <div className="grid grid-cols-2 gap-2">
                   <div>
                     <label className="block text-slate-600 dark:text-slate-400 mb-0.5">
-                      New PIN (نیا پن):
+                      New PIN:
                     </label>
                     <input
                       type="password"
                       required
-                      maxLength={10}
+                      minLength={4}
                       value={newPinInput}
                       onChange={(e) => setNewPinInput(e.target.value)}
                       className="w-full px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-mono tracking-widest text-xs"
@@ -572,12 +1009,12 @@ export const LoginRoleModal: React.FC<LoginRoleModalProps> = ({
                   </div>
                   <div>
                     <label className="block text-slate-600 dark:text-slate-400 mb-0.5">
-                      Confirm PIN (تصدیق کریں):
+                      Confirm PIN:
                     </label>
                     <input
                       type="password"
                       required
-                      maxLength={10}
+                      minLength={4}
                       value={confirmPinInput}
                       onChange={(e) => setConfirmPinInput(e.target.value)}
                       className="w-full px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-mono tracking-widest text-xs"
@@ -587,7 +1024,7 @@ export const LoginRoleModal: React.FC<LoginRoleModalProps> = ({
 
                 <button
                   type="submit"
-                  className="w-full py-2 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-lg cursor-pointer transition-colors"
+                  className="w-full py-2 bg-slate-900 hover:bg-slate-800 dark:bg-amber-500 dark:text-slate-950 dark:hover:bg-amber-400 text-white font-bold rounded-lg cursor-pointer transition-colors"
                 >
                   Update &amp; Save New PIN
                 </button>

@@ -2,9 +2,13 @@ import {
   AttendanceRecord,
   BroadcastContact,
   BusinessProfile,
+  CategoryRecord,
   CODOrder,
   Customer,
   Employee,
+  Investor,
+  InvestorTransaction,
+  LoginFormConfig,
   LuckyDrawEvent,
   LoginAuditRecord,
   ProductBroadcast,
@@ -15,8 +19,24 @@ import {
   ReviewRewardSubmission,
   SavedBroadcastCampaign,
   Transaction,
+  UserAccount,
   WhatsAppNotification,
 } from '../types';
+
+export const defaultLoginFormConfig: LoginFormConfig = {
+  title: 'Sign In to 100DAGAR',
+  description: 'Enter your credentials to access your secure account',
+  allowMobileLogin: true,
+  allowUsernameLogin: true,
+  allowEmailLogin: true,
+  showPasswordVisibilityToggle: true,
+  showRememberMe: true,
+  showForgotPasswordLink: true,
+  allowSelfRegistration: true,
+  supportContactNumber: '0312 5256 266',
+  loginInstructions:
+    'Customers can log in using their registered mobile number and PIN. Default PIN is the last 6 digits of mobile number. Please change your temporary PIN immediately upon first sign in.',
+};
 
 export const defaultBusinessProfile: BusinessProfile = {
   name: '100DAGAR',
@@ -30,6 +50,7 @@ export const defaultBusinessProfile: BusinessProfile = {
   monthlyReminderDay: 1,
   autoSendEnabled: true,
   defaultPaymentTermsDays: 7,
+  loginFormConfig: defaultLoginFormConfig,
   paymentChannels: {
     easyPaisa: {
       enabled: true,
@@ -69,13 +90,14 @@ export const defaultBusinessProfile: BusinessProfile = {
   adminPin: '580987', // USER DIRECTIVE: Owner default pin is 580987 and resettable in backend
 };
 
-// USER DIRECTIVE: Single pristine demo item with full pictures, sizes, specs & details!
+// USER DIRECTIVE: Single pristine demo item with full pictures, sizes, specs & details, plus viral upcoming item
 export const defaultProducts: ProductItem[] = [
   {
     id: 'prod_1',
     name: '5-in-1 Hot Air Styler & Hair Dryer Brush',
     urduName: 'فائیو ان ون ہاٹ ایئر ہیئر اسٹائلر ملٹی فنکشن',
     category: 'Cosmetics & Personal Care',
+    parentCategoryId: 'cat_cosmetics',
     sku: 'ELEC-HAIR-001',
     costPrice: 2250,
     marketPrice: 6980,
@@ -117,7 +139,55 @@ export const defaultProducts: ProductItem[] = [
       'The 100DAGAR 5-in-1 Hot Air Styler & Hair Dryer Brush is a complete hair styling salon in a single box. Engineered with aerodynamic Coanda-effect airflow, it shapes and curls hair automatically while drying. Retail market price is Rs. 6,980 across major stores; our direct wholesale lot rate is Rs. 3,490, giving customers an instant 50% cash saving.',
     websiteUrl: 'https://100dagar.pk/products/5-in-1-hot-air-styler',
     description: 'High-demand salon grade multi-head hair styling tool. High turnover wholesale lot with 50% instant savings.',
+    investorId: 'inv_1',
+    investorWhatsApp: '03001234567',
     createdAt: '2026-03-01',
+  },
+  {
+    id: 'prod_2',
+    name: 'Smart Ultra AMOLED GPS Smartwatch (Series 10)',
+    urduName: 'اسمارٹ الٹرا اے ایم او ایل ای ڈی واچ (جلد دستیاب)',
+    category: 'Upcoming / Viral Products',
+    parentCategoryId: 'cat_electronics',
+    isUpcoming: true,
+    sku: 'WATCH-ULTRA-S10',
+    costPrice: 4200,
+    marketPrice: 12500,
+    ourPrice: 5990,
+    stockQty: 0,
+    minStockAlert: 5,
+    salesCount: 0,
+    totalRevenue: 0,
+    totalProfit: 0,
+    isWinningItem: true,
+    badgeText: 'COMING SOON',
+    rating: 5.0,
+    imageUrl: 'https://images.unsplash.com/photo-1579586337278-3befd40fd17a?w=800&auto=format&fit=crop&q=80',
+    pictures: [
+      'https://images.unsplash.com/photo-1579586337278-3befd40fd17a?w=800&auto=format&fit=crop&q=80',
+      'https://images.unsplash.com/photo-1508685096489-7aacd43bd3b1?w=800&auto=format&fit=crop&q=80',
+    ],
+    sizes: ['Titanium Orange Strap (49mm)', 'Ocean Black Strap (49mm)'],
+    selectedSize: 'Titanium Orange Strap (49mm)',
+    specifications: {
+      'Display': '2.02 Inch HD AMOLED Display (60Hz)',
+      'Connectivity': 'Bluetooth 5.3 Calling + GPS Location Tracking',
+      'Battery Life': 'Up to 5 Days Typical Use (Wireless Qi Fast Charger Included)',
+      'Water Resistance': 'IP68 Deep Waterproof Rating',
+      'Sensors': 'Real-time Heart Rate, SpO2, Blood Pressure, Sleep Monitor',
+      'Status': 'Under Shipment / Arriving Soon in Madina Market',
+    },
+    features: [
+      'Viral TikTok Trending Smartwatch with Crisp High Refresh AMOLED Screen',
+      'Dual-speaker clear audio for direct Bluetooth calling on Jazz, Zong, Telenor',
+      'Wireless magnetic fast charging with robust aerospace titanium alloy case',
+      'Informational showcase: Pre-bookings open via direct WhatsApp enquiry',
+    ],
+    details:
+      'Viral upcoming item currently under wholesale transit. Purchasing is locked while in transit. Customers can register interest and enquire directly on WhatsApp for early lot reservations.',
+    websiteUrl: 'https://100dagar.pk/products/smart-ultra-amoled-watch',
+    description: 'Viral high-tech smartwatch arriving next week. Pre-orders opening soon.',
+    createdAt: '2026-03-02',
   },
 ];
 
@@ -621,11 +691,11 @@ export const defaultLoginAuditLogs: LoginAuditRecord[] = [
     id: 'log_1',
     userName: 'Al-Haj Muhammad Asif',
     phone: '03125256266',
-    role: 'admin',
+    role: 'super_admin',
     timestamp: '2026-03-02T09:15:00Z',
     status: 'success',
     ipOrDevice: 'Main Office Terminal (Lahore)',
-    notes: 'Owner Master Login verified with PIN',
+    notes: 'Super Admin Master Login verified with PIN',
     usedPin: '••••••',
   },
   {
@@ -649,6 +719,200 @@ export const defaultLoginAuditLogs: LoginAuditRecord[] = [
     ipOrDevice: 'Android Chrome (Karachi)',
     notes: 'Reseller Portal Login with PIN',
     usedPin: '••••••',
+  },
+];
+
+// CENTRALIZED CATEGORY RECORDS (Parent Categories, Subcategories, & Upcoming/Viral)
+export const defaultCategoryRecords: CategoryRecord[] = [
+  { id: 'cat_cosmetics', name: 'Cosmetics & Personal Care', urduName: 'کاسمیٹکس و پرسنل کیئر', displayOrder: 1 },
+  { id: 'cat_electronics', name: 'Electronics & Gadgets', urduName: 'الیکٹرانکس و گیجٹس', displayOrder: 2 },
+  { id: 'cat_fashion', name: 'Fashion & Apparel', urduName: 'فیشن و ملبوسات', displayOrder: 3 },
+  { id: 'cat_kitchen', name: 'Kitchen & Home', urduName: 'کچن و گھریلو سامان', displayOrder: 4 },
+  { id: 'cat_decorative', name: 'Decorative Items', urduName: 'ڈیکوریشن و تحائف', displayOrder: 5 },
+  { id: 'cat_accessories', name: 'Accessories', urduName: 'متفرق اسیسریز', displayOrder: 6 },
+  {
+    id: 'cat_upcoming',
+    name: 'Upcoming / Viral Products',
+    urduName: 'جلد دستیاب (وائرل آئٹمز)',
+    isUpcoming: true,
+    description: 'Informational showcase of high-velocity viral wholesale lots in transit',
+    displayOrder: 7,
+  },
+];
+
+// INVESTORS DEFAULT DATA
+export const defaultInvestors: Investor[] = [
+  {
+    id: 'inv_1',
+    name: 'Haji Tariq Mehmood',
+    urduName: 'حاجی طارق محمود (انویسٹر)',
+    phone: '03001234567',
+    whatsapp: '03001234567',
+    email: 'tariq.invest@100dagar.pk',
+    address: 'Plaza # 4, Shah Alam Wholesale Market, Lahore',
+    totalInvestment: 500000,
+    profitShareType: 'percentage',
+    profitShareValue: 35, // 35% net profit split
+    assignedProductIds: ['prod_1'],
+    status: 'active',
+    settledProfit: 10850,
+    notes: 'Funded import lot for 5-in-1 Hot Air Stylers (35% net profit share).',
+    createdAt: '2026-02-01',
+  },
+  {
+    id: 'inv_2',
+    name: 'Sheikh Farhan Ahmed',
+    urduName: 'شیخ فرحان احمد (کیپٹل پارٹنر)',
+    phone: '03339876543',
+    whatsapp: '03339876543',
+    email: 'farhan.capital@100dagar.pk',
+    address: 'Suit 12, Hafeez Centre, Gulberg III, Lahore',
+    totalInvestment: 1000000,
+    profitShareType: 'fixed_per_unit',
+    profitShareValue: 200, // Rs. 200 per unit sold
+    assignedProductIds: ['prod_2'],
+    status: 'active',
+    settledProfit: 0,
+    notes: 'Seed investor for upcoming AMOLED Smartwatch lot.',
+    createdAt: '2026-02-15',
+  },
+];
+
+// INVESTOR TRANSACTIONS (Date-wise Capital & Profit Ledger)
+export const defaultInvestorTransactions: InvestorTransaction[] = [
+  {
+    id: 'inv_tx_1',
+    investorId: 'inv_1',
+    date: '2026-02-01',
+    type: 'investment_deposit',
+    amount: 500000,
+    productId: 'prod_1',
+    productName: '5-in-1 Hot Air Styler & Hair Dryer Brush',
+    paymentMode: 'bank_transfer',
+    notes: 'Initial capital injection for Lot #100D-HAIR',
+    reference: 'BANK-MEZN-88321',
+    createdAt: '2026-02-01T10:00:00Z',
+  },
+  {
+    id: 'inv_tx_2',
+    investorId: 'inv_1',
+    date: '2026-03-01',
+    type: 'profit_payout',
+    amount: 10850,
+    productId: 'prod_1',
+    productName: '5-in-1 Hot Air Styler & Hair Dryer Brush',
+    paymentMode: 'jazzcash',
+    notes: 'Profit distribution for first 25 units sold (35% of Rs. 31,000 profit = Rs. 10,850)',
+    reference: 'JCASH-PAY-59402',
+    createdAt: '2026-03-01T17:00:00Z',
+  },
+  {
+    id: 'inv_tx_3',
+    investorId: 'inv_2',
+    date: '2026-02-15',
+    type: 'investment_deposit',
+    amount: 1000000,
+    productId: 'prod_2',
+    productName: 'Smart Ultra AMOLED GPS Smartwatch (Series 10)',
+    paymentMode: 'bank_transfer',
+    notes: 'Capital deposit for shipment of 200x Smartwatch units',
+    reference: 'BANK-HBL-99214',
+    createdAt: '2026-02-15T12:00:00Z',
+  },
+];
+
+// CENTRAL USER ACCOUNTS WITH ROLE ENFORCEMENT & SALTED HASH READY
+export const defaultUserAccounts: UserAccount[] = [
+  {
+    id: 'usr_superadmin',
+    username: 'admin',
+    fullName: 'Al-Haj Muhammad Asif',
+    urduName: 'الحاج محمد آصف (اسٹور مالک)',
+    phone: '03125256266',
+    email: 'owner@100dagar.pk',
+    role: 'super_admin',
+    status: 'active',
+    passwordHash: '580987', // Legacy PIN supported, seamlessly salted on password change
+    suggestedDefaultPin: '580987',
+    createdAt: '2026-01-01',
+    lastLoginAt: '2026-03-02T09:15:00Z',
+    loginCount: 142,
+  },
+  {
+    id: 'usr_manager_1',
+    username: 'bilal_manager',
+    fullName: 'Bilal Ahmed',
+    urduName: 'بلال احمد (سٹور مینیجر)',
+    phone: '03215551234',
+    email: 'bilal@100dagar.pk',
+    role: 'manager',
+    status: 'active',
+    passwordHash: '551234', // default: last 6 digits of 03215551234
+    suggestedDefaultPin: '551234',
+    createdAt: '2026-01-15',
+    lastLoginAt: '2026-03-02T08:30:00Z',
+    loginCount: 68,
+  },
+  {
+    id: 'usr_staff_1',
+    username: 'hamza_pos',
+    fullName: 'Hamza Rasheed',
+    urduName: 'حمزہ رشید (سیلز و کیشیئر)',
+    phone: '03456667890',
+    email: 'hamza@100dagar.pk',
+    role: 'staff',
+    status: 'active',
+    passwordHash: '667890', // default: last 6 digits of 03456667890
+    suggestedDefaultPin: '667890',
+    createdAt: '2026-02-01',
+    lastLoginAt: '2026-03-01T18:00:00Z',
+    loginCount: 35,
+  },
+  {
+    id: 'usr_investor_1',
+    username: 'tariq_investor',
+    fullName: 'Haji Tariq Mehmood',
+    urduName: 'حاجی طارق محمود (انویسٹر)',
+    phone: '03001234567',
+    email: 'tariq.invest@100dagar.pk',
+    role: 'investor',
+    linkedInvestorId: 'inv_1',
+    status: 'active',
+    passwordHash: '234567', // default: last 6 digits of 03001234567
+    suggestedDefaultPin: '234567',
+    createdAt: '2026-02-01',
+    lastLoginAt: '2026-03-01T14:20:00Z',
+    loginCount: 12,
+  },
+  {
+    id: 'usr_reseller_1',
+    username: 'usman_reseller',
+    fullName: 'Usman Ghani',
+    urduName: 'عثمان غنی (ری سیلر)',
+    phone: '03125256266',
+    role: 'reseller',
+    linkedResellerCode: 'RES-100D-01',
+    status: 'active',
+    passwordHash: '526266',
+    suggestedDefaultPin: '526266',
+    createdAt: '2026-02-10',
+    lastLoginAt: '2026-03-02T14:45:00Z',
+    loginCount: 29,
+  },
+  {
+    id: 'usr_cust_1',
+    username: 'madina_cosmetics',
+    fullName: 'Al-Madina Cosmetics & General Store',
+    urduName: 'المدینہ کاسمیٹکس',
+    phone: '03001234567',
+    role: 'customer',
+    linkedCustomerId: 'cust_1',
+    status: 'active',
+    passwordHash: '234567',
+    suggestedDefaultPin: '234567',
+    createdAt: '2026-02-15',
+    lastLoginAt: '2026-03-02T11:30:00Z',
+    loginCount: 8,
   },
 ];
 

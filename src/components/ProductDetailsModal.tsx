@@ -241,56 +241,98 @@ export const ProductDetailsModal: React.FC<ProductDetailsModalProps> = ({
 
               {/* QUANTITY & ACTIONS */}
               <div className="space-y-2 pt-1">
-                <div className="flex items-center gap-3">
-                  <div className="flex items-center border border-slate-300 dark:border-slate-700 rounded-lg overflow-hidden bg-white dark:bg-slate-800">
+                {product.isUpcoming ? (
+                  <div className="space-y-2">
+                    <div className="p-3 bg-purple-50 dark:bg-purple-950/40 border border-purple-200 dark:border-purple-800 rounded-xl text-center">
+                      <span className="text-xs font-black text-purple-900 dark:text-purple-200 uppercase tracking-wider block">
+                        ✨ Coming Soon / وائرل - جلد دستیاب
+                      </span>
+                      <p className="text-[11px] text-purple-700 dark:text-purple-300 mt-0.5">
+                        This item is currently under transit. Pre-booking enquiries open directly via WhatsApp.
+                      </p>
+                    </div>
+
                     <button
                       type="button"
-                      onClick={() => setQuantity(Math.max(1, quantity - 1))}
-                      className="px-3 py-1.5 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 font-bold cursor-pointer"
+                      onClick={() => {
+                        const text = `السلام علیکم! میں 100DAGAR پر جلد آنے والی پراڈکٹ *${product.name}* کے بارے میں معلومات اور لاٹ بکنگ کروانا چاہتا ہوں۔ براہ کرم تفصیلات رہنمائی فرمائیں۔`;
+                        openWhatsAppDirect(product.investorWhatsApp || profile.phone || '03125256266', text);
+                      }}
+                      className="w-full py-2.5 px-4 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-xs transition-colors flex items-center justify-center gap-2 cursor-pointer"
                     >
-                      -
-                    </button>
-                    <span className="px-3 py-1.5 font-mono font-bold text-xs text-slate-900 dark:text-white min-w-[2.5rem] text-center">
-                      {quantity}
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => setQuantity(quantity + 1)}
-                      className="px-3 py-1.5 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 font-bold cursor-pointer"
-                    >
-                      +
+                      <Phone className="w-4 h-4" />
+                      <span>Enquire on WhatsApp (واٹس ایپ معلومات و بکنگ)</span>
                     </button>
                   </div>
+                ) : (
+                  <>
+                    <div className="flex items-center gap-3">
+                      <div className="flex items-center border border-slate-300 dark:border-slate-700 rounded-lg overflow-hidden bg-white dark:bg-slate-800">
+                        <button
+                          type="button"
+                          onClick={() => setQuantity(Math.max(1, quantity - 1))}
+                          className="px-3 py-1.5 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 font-bold cursor-pointer"
+                        >
+                          -
+                        </button>
+                        <span className="px-3 py-1.5 font-mono font-bold text-xs text-slate-900 dark:text-white min-w-[2.5rem] text-center">
+                          {quantity}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setQuantity(quantity + 1)}
+                          className="px-3 py-1.5 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 font-bold cursor-pointer"
+                        >
+                          +
+                        </button>
+                      </div>
 
-                  {/* Add to Cart */}
-                  <button
-                    type="button"
-                    onClick={handleAdd}
-                    className="flex-1 py-2.5 px-4 bg-[#FFD200] hover:bg-amber-400 text-slate-950 font-extrabold text-xs rounded-xl shadow-xs transition-all flex items-center justify-center gap-2 cursor-pointer"
-                  >
-                    {addedAnimation ? (
-                      <>
-                        <Check className="w-4 h-4 stroke-[3]" />
-                        <span>Added to Cart!</span>
-                      </>
-                    ) : (
-                      <>
-                        <ShoppingBag className="w-4 h-4" />
-                        <span>Add to Cart ({profile.currencySymbol}{(product.ourPrice * quantity).toLocaleString('en-PK')})</span>
-                      </>
+                      {/* Option 1: Add to Cart */}
+                      <button
+                        type="button"
+                        onClick={handleAdd}
+                        className="flex-1 py-2.5 px-4 bg-[#FFD200] hover:bg-amber-400 text-slate-950 font-extrabold text-xs rounded-xl shadow-xs transition-all flex items-center justify-center gap-2 cursor-pointer"
+                      >
+                        {addedAnimation ? (
+                          <>
+                            <Check className="w-4 h-4 stroke-[3]" />
+                            <span>Added to Cart!</span>
+                          </>
+                        ) : (
+                          <>
+                            <ShoppingBag className="w-4 h-4" />
+                            <span>Add to Cart ({profile.currencySymbol}{(product.ourPrice * quantity).toLocaleString('en-PK')})</span>
+                          </>
+                        )}
+                      </button>
+                    </div>
+
+                    {/* Option 2: Direct Business WhatsApp Order */}
+                    <button
+                      type="button"
+                      onClick={handleDirectWhatsAppOrder}
+                      className="w-full py-2 px-4 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-xs transition-colors flex items-center justify-center gap-2 cursor-pointer"
+                    >
+                      <Phone className="w-3.5 h-3.5" />
+                      <span>Order on WhatsApp (واٹس ایپ فوری آرڈر)</span>
+                    </button>
+
+                    {/* Option 3: Investor WhatsApp Order (If assigned to this product) */}
+                    {product.investorWhatsApp && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const text = `السلام علیکم! میں *${product.name}* کا آرڈر انویسٹر پارٹنر سے کنفرم کرنا چاہتا ہوں۔\nتعداد: ${quantity}\nقیمت: ${profile.currencySymbol}${(product.ourPrice * quantity).toLocaleString('en-PK')}`;
+                          openWhatsAppDirect(product.investorWhatsApp!, text);
+                        }}
+                        className="w-full py-2 px-4 bg-teal-600 hover:bg-teal-700 text-white font-bold text-xs rounded-xl shadow-xs transition-colors flex items-center justify-center gap-2 cursor-pointer"
+                      >
+                        <Phone className="w-3.5 h-3.5" />
+                        <span>Order via Investor WhatsApp ({product.investorWhatsApp})</span>
+                      </button>
                     )}
-                  </button>
-                </div>
-
-                {/* Direct WhatsApp Order */}
-                <button
-                  type="button"
-                  onClick={handleDirectWhatsAppOrder}
-                  className="w-full py-2 px-4 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-xs transition-colors flex items-center justify-center gap-2 cursor-pointer"
-                >
-                  <Phone className="w-3.5 h-3.5" />
-                  <span>Instant Order on WhatsApp (واٹس ایپ آرڈر)</span>
-                </button>
+                  </>
+                )}
               </div>
 
               {/* External Website Link */}
