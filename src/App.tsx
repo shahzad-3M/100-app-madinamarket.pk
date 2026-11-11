@@ -131,10 +131,8 @@ export default function App() {
   const [activeRole, setActiveRole] = useState<UserRole>(getActiveRole);
   const [currentUser, setCurrentUser] = useState<AppUser>(getCurrentUser);
   const [isRoleModalOpen, setIsRoleModalOpen] = useState(false);
-  const [loginModalInitialTab, setLoginModalInitialTab] = useState<'customer' | 'admin' | 'reseller'>('customer');
 
-  const openRoleModal = (tab: 'customer' | 'admin' | 'reseller' = 'customer') => {
-    setLoginModalInitialTab(tab);
+  const openRoleModal = () => {
     setIsRoleModalOpen(true);
   };
 
@@ -1028,15 +1026,16 @@ export default function App() {
   };
 
   // OPEN MODALS
-  const openAddTransaction = (type: 'credit' | 'debit' = 'credit', customerId?: string) => {
-    setAddTxType(type);
-    setAddTxCustomerId(customerId || selectedCustomerId);
+  const openAddTransaction = (type?: unknown, customerId?: unknown) => {
+    const validType = (type === 'debit') ? 'debit' : 'credit';
+    setAddTxType(validType);
+    setAddTxCustomerId(typeof customerId === 'string' ? customerId : selectedCustomerId);
     setIsAddTxOpen(true);
   };
 
-  const openScheduleWhatsApp = (customerId?: string, date?: string) => {
-    setScheduleCustomerId(customerId || selectedCustomerId);
-    setScheduleDate(date);
+  const openScheduleWhatsApp = (customerId?: unknown, date?: unknown) => {
+    setScheduleCustomerId(typeof customerId === 'string' ? customerId : selectedCustomerId);
+    setScheduleDate(typeof date === 'string' ? date : undefined);
     setIsScheduleWhatsAppOpen(true);
   };
 
@@ -1432,7 +1431,6 @@ export default function App() {
             <span className="text-slate-300 dark:text-slate-700">·</span>
             <button
               onClick={() => {
-                setLoginModalInitialTab('admin');
                 setIsRoleModalOpen(true);
               }}
               className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 underline cursor-pointer"
@@ -1467,7 +1465,6 @@ export default function App() {
         resellers={resellers}
         onSelectRole={handleSelectRole}
         onLogout={handleLogout}
-        initialTab={loginModalInitialTab}
       />
 
       {/* STANDARD MODALS */}

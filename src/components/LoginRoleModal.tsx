@@ -32,7 +32,6 @@ interface LoginRoleModalProps {
   customers?: Customer[];
   resellers?: Reseller[];
   onLogout?: () => void;
-  initialTab?: 'customer' | 'admin' | 'reseller';
 }
 
 export const LoginRoleModal: React.FC<LoginRoleModalProps> = ({

@@ -32,7 +32,17 @@ export function generateWhatsAppLink(phone: string, message: string): string {
 
 export function openWhatsAppDirect(phone: string, message: string): void {
   const url = generateWhatsAppLink(phone, message);
-  window.open(url, '_blank', 'noopener,noreferrer');
+  try {
+    const link = document.createElement('a');
+    link.href = url;
+    link.target = '_blank';
+    link.rel = 'noopener noreferrer';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  } catch (err) {
+    console.error('WhatsApp link error:', err);
+  }
 }
 
 export function formatPaymentChannelsText(profileOrChannels: BusinessProfile | PakistaniPaymentChannels): string {

@@ -229,9 +229,10 @@ export const Navbar: React.FC<NavbarProps> = ({
             )}
 
             {/* Account & Login Button */}
+            {/* Account & Login Button */}
             <button
               type="button"
-              onClick={onOpenRoleModal}
+              onClick={() => onOpenRoleModal?.()}
               className={`px-2.5 sm:px-3 py-1.5 text-xs font-bold rounded-lg border flex items-center gap-1 sm:gap-1.5 transition-all cursor-pointer shadow-2xs ${
                 userRole === 'admin'
                   ? 'border-amber-400 bg-amber-50 dark:bg-amber-950/60 text-amber-900 dark:text-amber-200'
@@ -255,7 +256,7 @@ export const Navbar: React.FC<NavbarProps> = ({
 
             {/* Quick Cart Button */}
             <button
-              onClick={onOpenCart}
+              onClick={() => onOpenCart?.()}
               className="flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 bg-amber-50 dark:bg-amber-950/40 hover:bg-amber-100 dark:hover:bg-amber-900/60 border border-amber-200 dark:border-amber-800 rounded-lg text-slate-900 dark:text-slate-100 cursor-pointer transition-colors shadow-2xs"
               title="Shopping Cart / آرڈر"
             >
@@ -274,7 +275,7 @@ export const Navbar: React.FC<NavbarProps> = ({
 
             {/* Theme Toggle */}
             <button
-              onClick={onToggleDarkMode}
+              onClick={() => onToggleDarkMode()}
               aria-label="Toggle theme"
               className="p-1.5 text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-100 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
             >
@@ -284,7 +285,7 @@ export const Navbar: React.FC<NavbarProps> = ({
             {/* Record Entry Quick Trigger (Only for Admin in Merchant View) */}
             {viewMode === 'merchant' && userRole === 'admin' && (
               <button
-                onClick={onOpenAddTransaction}
+                onClick={() => onOpenAddTransaction()}
                 className="hidden lg:inline-flex items-center gap-1 px-3 py-1.5 text-xs font-semibold text-white bg-slate-900 hover:bg-slate-800 dark:bg-amber-500 dark:text-slate-950 dark:hover:bg-amber-400 rounded-lg shadow-xs transition-colors whitespace-nowrap cursor-pointer"
               >
                 <Plus className="w-3.5 h-3.5" />
