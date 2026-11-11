@@ -289,7 +289,7 @@ export const ProductDetailsModal: React.FC<ProductDetailsModalProps> = ({
                   className="w-full py-2 px-4 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-xs transition-colors flex items-center justify-center gap-2 cursor-pointer"
                 >
                   <Phone className="w-3.5 h-3.5" />
-                  <span>Instant Order on WhatsApp (0312 5256 266)</span>
+                  <span>Instant Order on WhatsApp (واٹس ایپ آرڈر)</span>
                 </button>
               </div>
 

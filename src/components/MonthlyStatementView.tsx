@@ -17,13 +17,16 @@ import {
   FileText,
   AlertCircle,
   X,
+  PackagePlus,
 } from 'lucide-react';
 import {
+  AppUser,
   BusinessProfile,
   Customer,
   LuckyDrawEvent,
   MonthlyCustomerStatement,
   Transaction,
+  UserRole,
 } from '../types';
 import { generateMonthlyCustomerStatements } from '../utils/automationEngine';
 import { buildMonthlyStatementWhatsAppMessage, openWhatsAppDirect } from '../utils/whatsapp';
@@ -33,6 +36,8 @@ interface MonthlyStatementViewProps {
   transactions: Transaction[];
   luckyDraws: LuckyDrawEvent[];
   profile: BusinessProfile;
+  userRole?: UserRole;
+  currentUser?: AppUser;
 }
 
 export const MonthlyStatementView: React.FC<MonthlyStatementViewProps> = ({
@@ -40,7 +45,10 @@ export const MonthlyStatementView: React.FC<MonthlyStatementViewProps> = ({
   transactions,
   luckyDraws,
   profile,
+  userRole = 'customer',
+  currentUser,
 }) => {
+  const isCustomer = userRole === 'customer';
   const currentDate = new Date();
   const [selectedMonth, setSelectedMonth] = useState<number>(currentDate.getMonth() + 1); // 1-12
   const [selectedYear, setSelectedYear] = useState<number>(currentDate.getFullYear());
@@ -48,8 +56,20 @@ export const MonthlyStatementView: React.FC<MonthlyStatementViewProps> = ({
   const [expandedCustomerId, setExpandedCustomerId] = useState<string | null>(null);
   const [printableStatement, setPrintableStatement] = useState<MonthlyCustomerStatement | null>(null);
 
+  // Identify logged in customer strictly by customerId or phone
+  const loggedInCustomer = useMemo(() => {
+    if (!currentUser) return null;
+    return (
+      customers.find(
+        (c) =>
+          (currentUser.customerId && c.id === currentUser.customerId) ||
+          (currentUser.phone && c.phone && c.phone.replace(/\D/g, '') === currentUser.phone.replace(/\D/g, ''))
+      ) || null
+    );
+  }, [customers, currentUser]);
+
   // Generate statements for all customers who made purchases in this entire month
-  const monthlyStatements = useMemo(() => {
+  const allMonthlyStatements = useMemo(() => {
     return generateMonthlyCustomerStatements(
       customers,
       transactions,
@@ -59,7 +79,19 @@ export const MonthlyStatementView: React.FC<MonthlyStatementViewProps> = ({
     );
   }, [customers, transactions, luckyDraws, selectedMonth, selectedYear]);
 
+  // USER DIRECTIVE: Limit customer to its own boundary only; never show other account settlements or WhatsApp send!
+  const monthlyStatements = useMemo(() => {
+    if (isCustomer) {
+      if (!loggedInCustomer) return [];
+      return allMonthlyStatements.filter((st) => st.customer.id === loggedInCustomer.id);
+    }
+    return allMonthlyStatements;
+  }, [isCustomer, loggedInCustomer, allMonthlyStatements]);
+
   const filteredStatements = useMemo(() => {
+    if (isCustomer) {
+      return monthlyStatements;
+    }
     if (!searchTerm.trim()) return monthlyStatements;
     const q = searchTerm.toLowerCase();
     return monthlyStatements.filter((st) => {
@@ -69,7 +101,7 @@ export const MonthlyStatementView: React.FC<MonthlyStatementViewProps> = ({
       const matchCity = st.customer.city ? st.customer.city.toLowerCase().includes(q) : false;
       return matchName || matchUrdu || matchPhone || matchCity;
     });
-  }, [monthlyStatements, searchTerm]);
+  }, [isCustomer, monthlyStatements, searchTerm]);
 
   // High-level aggregates
   const totalMonthPurchases = monthlyStatements.reduce((acc, st) => acc + st.totalPurchases, 0);
@@ -122,14 +154,18 @@ export const MonthlyStatementView: React.FC<MonthlyStatementViewProps> = ({
         <div>
           <div className="flex items-center gap-2">
             <span className="bg-[#FFD200] text-slate-950 font-black text-xs px-2.5 py-1 rounded-md uppercase">
-              Monthly Khata
+              {isCustomer ? 'My Khata' : 'Monthly Khata'}
             </span>
             <h1 className="text-lg sm:text-xl font-extrabold text-slate-900 dark:text-white">
-              Customer Monthly Statements (ماہانہ کسٹمر اسٹیٹمنٹ)
+              {isCustomer
+                ? 'My Monthly Statement & Ledger (میرا ماہانہ کھاتہ)'
+                : 'Customer Monthly Statements (ماہانہ کسٹمر اسٹیٹمنٹ)'}
             </h1>
           </div>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-            Entire month purchasing report, paid totals, savings breakdown, and Lucky Draw winning amounts.
+            {isCustomer
+              ? 'Your personal purchase records, payment receipts, discount savings, and lucky draw rewards.'
+              : 'Entire month purchasing report, paid totals, savings breakdown, and Lucky Draw winning amounts.'}
           </p>
         </div>
 
@@ -159,13 +195,15 @@ export const MonthlyStatementView: React.FC<MonthlyStatementViewProps> = ({
             </select>
           </div>
 
-          <button
-            onClick={handleBatchSendAll}
-            className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer"
-          >
-            <Send className="w-3.5 h-3.5" />
-            <span>Send All Statements (واٹس ایپ ارسال)</span>
-          </button>
+          {!isCustomer && (
+            <button
+              onClick={handleBatchSendAll}
+              className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer"
+            >
+              <Send className="w-3.5 h-3.5" />
+              <span>Send All Statements (واٹس ایپ ارسال)</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -173,19 +211,21 @@ export const MonthlyStatementView: React.FC<MonthlyStatementViewProps> = ({
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 shadow-2xs">
           <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider block">
-            Purchasing Customers
+            {isCustomer ? 'My Orders / Invoices' : 'Purchasing Customers'}
           </span>
           <div className="mt-1 flex items-baseline justify-between">
             <span className="text-2xl font-black text-slate-900 dark:text-white font-mono">
-              {monthlyStatements.length}
+              {isCustomer ? (monthlyStatements[0]?.invoicesCount || 0) : monthlyStatements.length}
             </span>
-            <span className="text-xs text-amber-600 font-urdu">کل خریدار کسٹمرز</span>
+            <span className="text-xs text-amber-600 font-urdu">
+              {isCustomer ? 'کل آرڈرز' : 'کل خریدار کسٹمرز'}
+            </span>
           </div>
         </div>
 
         <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 shadow-2xs">
           <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider block">
-            Total Monthly Sales
+            {isCustomer ? 'My Month Purchases' : 'Total Monthly Sales'}
           </span>
           <div className="mt-1 flex items-baseline justify-between">
             <span className="text-2xl font-black text-slate-900 dark:text-white font-mono">
@@ -197,7 +237,7 @@ export const MonthlyStatementView: React.FC<MonthlyStatementViewProps> = ({
 
         <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 shadow-2xs">
           <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider block">
-            Total Paid / Collected
+            {isCustomer ? 'My Total Paid' : 'Total Paid / Collected'}
           </span>
           <div className="mt-1 flex items-baseline justify-between">
             <span className="text-2xl font-black text-emerald-600 dark:text-emerald-400 font-mono">
@@ -209,47 +249,86 @@ export const MonthlyStatementView: React.FC<MonthlyStatementViewProps> = ({
 
         <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 shadow-2xs">
           <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider block">
-            Lucky Draw Winners in Month
+            {isCustomer ? 'Lucky Draw Rewards' : 'Lucky Draw Winners in Month'}
           </span>
           <div className="mt-1 flex items-baseline justify-between">
             <span className="text-2xl font-black text-amber-600 dark:text-amber-400 font-mono flex items-center gap-1">
               <Trophy className="w-5 h-5 text-amber-500" />
-              {winnersCount}
+              {isCustomer
+                ? (monthlyStatements[0]?.luckyDrawWinnings?.hasWon ? 'Winner 🏆' : 'Active ⭐')
+                : winnersCount}
             </span>
-            <span className="text-xs text-amber-600 font-urdu">لکی ڈرا فاتحین</span>
+            <span className="text-xs text-amber-600 font-urdu">لکی ڈرا انعام</span>
           </div>
         </div>
       </div>
 
-      {/* 3. SEARCH & FILTER ROW */}
-      <div className="flex items-center justify-between gap-4">
-        <div className="relative flex-1 max-w-md">
-          <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
-          <input
-            type="text"
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder="Search customer name, Urdu name, city, phone..."
-            className="w-full pl-9 pr-4 py-2 text-xs bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-slate-900 dark:text-white placeholder-slate-400 focus:ring-2 focus:ring-amber-400 focus:outline-hidden"
-          />
+      {/* 3. SEARCH & FILTER ROW (Only for Admin) */}
+      {!isCustomer && (
+        <div className="flex items-center justify-between gap-4">
+          <div className="relative flex-1 max-w-md">
+            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
+            <input
+              type="text"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder="Search customer name, Urdu name, city, phone..."
+              className="w-full pl-9 pr-4 py-2 text-xs bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl text-slate-900 dark:text-white placeholder-slate-400 focus:ring-2 focus:ring-amber-400 focus:outline-hidden"
+            />
+          </div>
+
+          <span className="text-xs font-mono text-slate-500">
+            Showing {filteredStatements.length} statement(s)
+          </span>
         </div>
+      )}
 
-        <span className="text-xs font-mono text-slate-500">
-          Showing {filteredStatements.length} statement(s)
-        </span>
-      </div>
-
-      {/* 4. STATEMENTS LIST */}
+      {/* 4. STATEMENTS LIST & EMPTY STATE */}
       {filteredStatements.length === 0 ? (
-        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-12 text-center space-y-3">
-          <FileText className="w-12 h-12 text-slate-300 dark:text-slate-600 mx-auto" />
-          <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200">
-            No Purchases Found for Selected Month
-          </h3>
-          <p className="text-xs text-slate-500 max-w-md mx-auto">
-            اس مہینے میں کسی کسٹمر کی خریداری موجود نہیں ہے یا تاریخ منتخب کریں۔
-          </p>
-        </div>
+        isCustomer ? (
+          /* USER DIRECTIVE: if nothing show nothing except common button message for all customers "add my product" direct link towards admin whatsApp */
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-3xl p-8 sm:p-12 text-center max-w-2xl mx-auto space-y-6 shadow-xs my-4">
+            <div className="w-16 h-16 rounded-2xl bg-amber-50 dark:bg-amber-950/60 border border-amber-200 dark:border-amber-800 flex items-center justify-center mx-auto text-amber-600 dark:text-amber-400">
+              <PackagePlus className="w-8 h-8" />
+            </div>
+
+            <div className="space-y-2">
+              <h2 className="text-lg sm:text-xl font-extrabold text-slate-900 dark:text-white">
+                No Khata Records Found for this Month
+              </h2>
+              <p className="text-xs sm:text-sm text-slate-500 dark:text-slate-400 font-urdu max-w-md mx-auto">
+                آپ کے ذاتی کھاتے میں اس ماہ کا کوئی بل یا بقایا رقم موجود نہیں ہے۔
+              </p>
+            </div>
+
+            <div className="pt-2 flex flex-col items-center gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  const text = 'السلام علیکم! میں مدینہ مارکیٹ پر اپنی نئی پراڈکٹ شامل / سپلائی کروانا چاہتا ہوں۔ براہ کرم تفصیلات اور طریقہ کار رہنمائی فرمائیں۔ جزاک اللہ!';
+                  openWhatsAppDirect('03125256266', text);
+                }}
+                className="w-full sm:w-auto px-6 py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs sm:text-sm rounded-xl shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-2.5 cursor-pointer"
+              >
+                <Phone className="w-4 h-4 text-white shrink-0" />
+                <span>Add My Product (واٹس ایپ پر اپنی پراڈکٹ شامل کروائیں)</span>
+              </button>
+              <span className="text-[11px] text-slate-400 block font-urdu">
+                مدینہ مارکیٹ ہول سیل ایڈمن کے ساتھ براہِ راست واٹس ایپ رابطہ
+              </span>
+            </div>
+          </div>
+        ) : (
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-12 text-center space-y-3">
+            <FileText className="w-12 h-12 text-slate-300 dark:text-slate-600 mx-auto" />
+            <h3 className="text-sm font-bold text-slate-800 dark:text-slate-200">
+              No Purchases Found for Selected Month
+            </h3>
+            <p className="text-xs text-slate-500 max-w-md mx-auto">
+              اس مہینے میں کسی کسٹمر کی خریداری موجود نہیں ہے یا تاریخ منتخب کریں۔
+            </p>
+          </div>
+        )
       ) : (
         <div className="space-y-4">
           {filteredStatements.map((st) => {
@@ -331,13 +410,15 @@ export const MonthlyStatementView: React.FC<MonthlyStatementViewProps> = ({
                       <Printer className="w-4 h-4" />
                     </button>
 
-                    <button
-                      onClick={() => handleSendWhatsApp(st)}
-                      className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer"
-                    >
-                      <Send className="w-3.5 h-3.5" />
-                      <span>WhatsApp Statement</span>
-                    </button>
+                    {!isCustomer && (
+                      <button
+                        onClick={() => handleSendWhatsApp(st)}
+                        className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-xs transition-colors flex items-center gap-1.5 cursor-pointer"
+                      >
+                        <Send className="w-3.5 h-3.5" />
+                        <span>WhatsApp Statement</span>
+                      </button>
+                    )}
 
                     <button
                       onClick={() => setExpandedCustomerId(isExpanded ? null : st.customer.id)}
@@ -433,6 +514,37 @@ export const MonthlyStatementView: React.FC<MonthlyStatementViewProps> = ({
               </div>
             );
           })}
+        </div>
+      )}
+
+      {/* Common Button for All Customers: Add My Product Direct Link to Admin WhatsApp (USER DIRECTIVE) */}
+      {isCustomer && filteredStatements.length > 0 && (
+        <div className="bg-gradient-to-r from-emerald-50 via-teal-50 to-emerald-50 dark:from-emerald-950/40 dark:via-slate-900 dark:to-emerald-950/40 border border-emerald-200 dark:border-emerald-800/80 rounded-2xl p-4 sm:p-5 flex flex-wrap items-center justify-between gap-4 shadow-2xs">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white flex items-center justify-center shrink-0 shadow-xs">
+              <PackagePlus className="w-5 h-5" />
+            </div>
+            <div>
+              <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                Want to sell or add custom wholesale lots on 100DAGAR?
+              </h3>
+              <span className="text-xs text-slate-500 dark:text-slate-400 font-urdu block">
+                اپنی دکان یا برانڈ کی پراڈکٹ 100DAGAR مارکیٹ پر شامل کروانے کے لیے ایڈمن سے رابطہ فرمائیں۔
+              </span>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => {
+              const text = 'السلام علیکم! میں مدینہ مارکیٹ پر اپنی نئی پراڈکٹ شامل / سپلائی کروانا چاہتا ہوں۔ براہ کرم تفصیلات اور طریقہ کار رہنمائی فرمائیں۔ جزاک اللہ!';
+              openWhatsAppDirect('03125256266', text);
+            }}
+            className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs rounded-xl shadow-xs transition-colors flex items-center gap-2 cursor-pointer"
+          >
+            <Phone className="w-3.5 h-3.5" />
+            <span>Add My Product (واٹس ایپ پر رابطہ)</span>
+          </button>
         </div>
       )}
 

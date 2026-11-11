@@ -16,6 +16,7 @@ import {
   ShieldCheck,
   AlertTriangle,
   Lock,
+  Smartphone,
 } from 'lucide-react';
 import { AppUser, BusinessProfile, CartItem, Customer, PaymentMode, SalePaymentType, Transaction } from '../types';
 import { formatPaymentChannelsText, openWhatsAppDirect } from '../utils/whatsapp';
@@ -429,14 +430,14 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
                   setPaymentMode(mode);
                   if (mode === 'cod') setSaleType('cod');
                 }}
-                className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-hidden"
+                className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-hidden cursor-pointer"
               >
-                <option value="easypaisa">EasyPaisa (03125256266 - مدینہ مارکیٹ)</option>
-                <option value="jazzcash">JazzCash (03125256266 - مدینہ مارکیٹ)</option>
-                <option value="sadapay">SadaPay (03125256266 - @100dagar)</option>
+                <option value="easypaisa">EasyPaisa</option>
+                <option value="jazzcash">JazzCash</option>
+                <option value="sadapay">SadaPay</option>
+                <option value="cod">Cash on Delivery (COD)</option>
                 <option value="bank_transfer">Meezan Bank Ltd (Islamic Banking)</option>
-                <option value="cash">Counter Cash (دکان پر نقد وصولی)</option>
-                <option value="cod">Cash on Delivery (COD - Remove accounts from WhatsApp)</option>
+                <option value="cash">Counter Cash (دکان پر نقد ادائیگی)</option>
               </select>
             </div>
 
@@ -472,6 +473,42 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
               </div>
             </div>
           </div>
+
+          {/* Unified 3-in-1 Mobile Wallet Notice: Single Number for EasyPaisa / JazzCash / SadaPay (USER DIRECTIVE) */}
+          {(paymentMode === 'easypaisa' || paymentMode === 'jazzcash' || paymentMode === 'sadapay') && (
+            <div className="bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700 rounded-xl p-3.5 space-y-2 shadow-2xs">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-black text-amber-950 dark:text-amber-200 flex items-center gap-1.5">
+                  <Smartphone className="w-4 h-4 text-amber-600 dark:text-amber-400" />
+                  Unified Mobile Wallet Account (EasyPaisa · JazzCash · SadaPay)
+                </span>
+                <span className="text-[10px] font-bold px-2 py-0.5 bg-amber-200 dark:bg-amber-900 text-amber-900 dark:text-amber-100 rounded-md">
+                  ایک ہی نمبر برائے تمام ادائیگیاں
+                </span>
+              </div>
+              <div className="flex flex-wrap items-center justify-between gap-3 pt-0.5">
+                <div>
+                  <span className="text-[11px] text-slate-500 dark:text-slate-400 block font-urdu">
+                    اکاؤنٹ نمبر برائے ایزی پیسہ، جاز کیش اور سادا پے:
+                  </span>
+                  <span className="font-mono text-base font-black text-slate-900 dark:text-white tracking-wider">
+                    0312 5256 266
+                  </span>
+                </div>
+                <div className="text-left sm:text-right">
+                  <span className="text-[11px] text-slate-500 dark:text-slate-400 block font-urdu">
+                    اکاؤنٹ ٹائٹل:
+                  </span>
+                  <span className="text-xs font-bold text-slate-800 dark:text-slate-200">
+                    Al-Haj Muhammad Asif (مدینہ مارکیٹ)
+                  </span>
+                </div>
+              </div>
+              <p className="text-[10px] text-slate-500 dark:text-slate-400 border-t border-amber-200 dark:border-amber-800/60 pt-1.5">
+                💡 نوٹ: رقم کی منتقلی کے بعد تصدیقی رسید / اسکرین شاٹ لازمی واٹس ایپ کر دیں۔
+              </p>
+            </div>
+          )}
 
           {/* CREDIT LIMIT EXCEEDED WARNING (USER DIRECTIVE: default 5000 credit limit) */}
           {dueBalance > 0 && selectedCustomer && (

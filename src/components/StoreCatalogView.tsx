@@ -279,8 +279,8 @@ export const StoreCatalogView: React.FC<StoreCatalogViewProps> = ({
             <p>• Soft reminder before 3 days</p>
             <p>• Due date payment alert (1 week max grace)</p>
             <p>• Overdue reminder every 3 days until settled</p>
-            <p className="font-mono font-bold text-slate-900 dark:text-slate-100 pt-1">
-              EasyPaisa/JazzCash: 03125256266
+            <p className="font-semibold text-slate-900 dark:text-slate-100 pt-1 text-[10px]">
+              EasyPaisa · JazzCash · SadaPay · COD Available
             </p>
           </div>
         </aside>

@@ -359,6 +359,8 @@ export interface AppUser {
   phone: string;
   resellerCode?: string;
   customerId?: string;
+  mustChangePassword?: boolean;
+  hasDefaultPin?: boolean;
 }
 
 // CASH ON DELIVERY (COD) ORDERS MANAGEMENT

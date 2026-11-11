@@ -179,8 +179,10 @@ export const LoginRoleModal: React.FC<LoginRoleModalProps> = ({
     );
 
     if (matchingCustomer) {
-      const expectedPin = matchingCustomer.pin || getDefaultPinForPhone(matchingCustomer.phone);
+      const defaultPin = getDefaultPinForPhone(matchingCustomer.phone);
+      const expectedPin = matchingCustomer.pin || defaultPin;
       if (cleanPin === expectedPin) {
+        const isUsingDefault = cleanPin === defaultPin && (!matchingCustomer.pin || matchingCustomer.pin === defaultPin);
         logUserLogin({
           userId: matchingCustomer.id,
           userName: matchingCustomer.name,
@@ -188,7 +190,7 @@ export const LoginRoleModal: React.FC<LoginRoleModalProps> = ({
           role: 'customer',
           status: 'success',
           ipOrDevice: 'Mobile Web Applet',
-          notes: 'Customer authenticated with PIN',
+          notes: isUsingDefault ? 'Customer authenticated with default PIN (Must change password)' : 'Customer authenticated with private PIN',
           usedPin: '••••••',
         });
         onSelectRole('customer', {
@@ -197,8 +199,15 @@ export const LoginRoleModal: React.FC<LoginRoleModalProps> = ({
           urduName: matchingCustomer.urduName || 'آن لائن کسٹمر',
           phone: matchingCustomer.phone,
           customerId: matchingCustomer.id,
+          hasDefaultPin: isUsingDefault,
+          mustChangePassword: isUsingDefault,
         });
-        onClose();
+        if (isUsingDefault) {
+          setModalMode('account');
+          setChangePinError('⚠️ سیکیورٹی نوٹس: آپ کا پاس ورڈ ڈیفالٹ ہے۔ برائے مہربانی اپنے کھاتے کے تحفظ کے لیے نیا پاس ورڈ / پن فوراً مقرر فرمائیں۔ (Please change your default PIN now)');
+        } else {
+          onClose();
+        }
         return;
       } else {
         logUserLogin({
@@ -211,41 +220,41 @@ export const LoginRoleModal: React.FC<LoginRoleModalProps> = ({
           notes: 'Incorrect customer PIN entered',
           usedPin: '••••••',
         });
-        setErrorMessage(
-          'غلط سیکیورٹی پن! درست پن درج کریں۔ اگر آپ نے پن تبدیل نہیں کیا تو ڈیفالٹ پن آپ کے موبائل کے آخری 6 ہندسے ہیں۔\n(Incorrect PIN. Default PIN is the last 6 digits of your phone)'
-        );
+        setErrorMessage('غلط موبائل نمبر یا سیکیورٹی پن۔ برائے مہربانی درست معلومات درج کریں۔ (Invalid credentials. Please verify your mobile number and security PIN)');
         return;
       }
     }
 
-    // 4. New Customer Registration via mobile number
+    // 4. New Customer Registration via mobile number (USER DIRECTIVE: instruct to change password and remind him/her)
     const defaultPin = getDefaultPinForPhone(cleanId);
     if (cleanPin === defaultPin) {
       const newCustName = fullName.trim() || `Customer ${cleanId.slice(-4)}`;
+      const newCustId = `cust_${Date.now()}`;
       logUserLogin({
         userName: newCustName,
         phone: cleanId,
         role: 'customer',
         status: 'success',
         ipOrDevice: 'Mobile Web Applet',
-        notes: 'New customer instant registration with default PIN',
+        notes: 'New customer instant registration (Instruction given to change PIN)',
         usedPin: '••••••',
       });
       onSelectRole('customer', {
-        id: `cust_${Date.now()}`,
+        id: newCustId,
         name: newCustName,
         urduName: 'آن لائن کسٹمر',
         phone: cleanId,
-        customerId: `cust_${Date.now()}`,
+        customerId: newCustId,
+        hasDefaultPin: true,
+        mustChangePassword: true,
       });
-      onClose();
+      setModalMode('account');
+      setChangePinError('⚠️ خوش آمدید! آپ کا اکاؤنٹ بن گیا ہے۔ اپنے کھاتے کی حفاظت کے لیے نیا پاس ورڈ / پن فوراً تبدیل کریں۔ (Welcome! Please change your default password/PIN to secure your account)');
       return;
     }
 
     // If none matched:
-    setErrorMessage(
-      'غلط موبائل نمبر یا پن کوڈ۔ اگر آپ پہلی بار لاگ ان ہو رہے ہیں تو پن کوڈ اپنے موبائل نمبر کے آخری 6 ہندسے درج کریں۔\n(Invalid credentials. For new users, default PIN is the last 6 digits of your phone)'
-    );
+    setErrorMessage('غلط موبائل نمبر یا سیکیورٹی پن۔ برائے مہربانی درست معلومات درج کریں۔ (Invalid credentials. Please verify your mobile number and security PIN)');
   };
 
   // CHANGE PIN HANDLER INSIDE USER PORTAL
@@ -288,14 +297,22 @@ export const LoginRoleModal: React.FC<LoginRoleModalProps> = ({
         (c) => c.id === currentUser.customerId || c.phone === currentUser.phone
       );
       const expected = targetCustomer?.pin || (targetCustomer ? getDefaultPinForPhone(targetCustomer.phone) : '123456');
-      if (currentPinInput.trim() !== expected) {
+      const defaultCurrent = getDefaultPinForPhone(currentUser.phone || '');
+      if (currentPinInput.trim() !== expected && currentPinInput.trim() !== defaultCurrent) {
         setChangePinError('موجودہ پن درست نہیں ہے۔ (Current PIN is incorrect)');
         return;
       }
       if (targetCustomer) {
         updateCustomerPin(targetCustomer.id, newPinInput.trim());
       }
-      setChangePinSuccess('آپ کا سیکیورٹی پن کامیابی سے تبدیل ہو گیا ہے۔ (PIN updated successfully!)');
+      // Update session state so reminder banner vanishes
+      onSelectRole('customer', {
+        ...currentUser,
+        hasDefaultPin: false,
+        mustChangePassword: false,
+      });
+      setChangePinError('');
+      setChangePinSuccess('آپ کا سیکیورٹی پاس ورڈ / پن کامیابی سے محفوظ ہو گیا ہے! (Your password/PIN has been updated safely!)');
       setCurrentPinInput('');
       setNewPinInput('');
       setConfirmPinInput('');
@@ -489,6 +506,19 @@ export const LoginRoleModal: React.FC<LoginRoleModalProps> = ({
                 </button>
               </div>
             </div>
+
+            {/* Security Alert: Remind Customer to Change Password (USER DIRECTIVE) */}
+            {(currentUser.mustChangePassword || currentUser.hasDefaultPin) && (
+              <div className="p-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700 rounded-xl space-y-1 text-xs text-amber-900 dark:text-amber-200">
+                <div className="flex items-center gap-1.5 font-bold text-amber-800 dark:text-amber-300">
+                  <ShieldCheck className="w-4 h-4 text-amber-600 shrink-0" />
+                  <span>سیکیورٹی نوٹس: پاس ورڈ تبدیلی ضروری ہے</span>
+                </div>
+                <p className="text-[11px] leading-relaxed">
+                  آپ کا اکاؤنٹ فی الحال ڈیفالٹ پن پر فعال ہے۔ اپنے آرڈرز اور کھاتے کے مکمل تحفظ کے لیے نیچے دیا گیا فارم استعمال کر کے نیا ذاتی پاس ورڈ / پن مقرر فرمائیں۔
+                </p>
+              </div>
+            )}
 
             {/* In-Portal Change PIN Form */}
             <div className="border-t border-slate-200 dark:border-slate-800 pt-4 space-y-3">

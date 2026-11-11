@@ -36,6 +36,7 @@ import {
   getCODOrders,
   getCurrentUser,
   getCustomers,
+  getDefaultPinForPhone,
   getEmployees,
   getLuckyDraws,
   getProductBroadcasts,
@@ -699,6 +700,32 @@ export default function App() {
 
     if (newRole === 'customer') {
       setViewMode('customer');
+      if (userDetails?.customerId && userDetails?.phone && userDetails.phone !== '03125256266') {
+        const cleanPhone = userDetails.phone.replace(/\D/g, '');
+        const exists = customers.some(
+          (c) => c.id === userDetails.customerId || c.phone.replace(/\D/g, '') === cleanPhone
+        );
+        if (!exists) {
+          const newCustRecord: Customer = {
+            id: userDetails.customerId,
+            name: userDetails.name || `Customer ${cleanPhone.slice(-4)}`,
+            urduName: userDetails.urduName || 'آن لائن کسٹمر',
+            phone: userDetails.phone,
+            city: 'Lahore',
+            customerType: 'individual',
+            balance: 0,
+            totalPurchases: 0,
+            creditLimit: 5000,
+            paymentTermsDays: 7,
+            status: 'active',
+            pin: getDefaultPinForPhone(userDetails.phone),
+            createdAt: new Date().toISOString(),
+          };
+          const updatedCusts = [newCustRecord, ...customers];
+          setCustomers(updatedCusts);
+          saveCustomers(updatedCusts);
+        }
+      }
       if (currentTab !== 'store' && currentTab !== 'lucky_draw' && currentTab !== 'monthly_statement' && currentTab !== 'resellers') {
         setCurrentTab('store');
       }
@@ -1071,8 +1098,32 @@ export default function App() {
         onOpenRoleModal={openRoleModal}
       />
 
+      {/* Security Reminder Banner: Prompt Customer to Change Default Password (USER DIRECTIVE) */}
+      {(currentUser.mustChangePassword || currentUser.hasDefaultPin) && activeRole === 'customer' && (
+        <div className="bg-amber-500 text-slate-950 px-3 py-2 text-xs font-bold flex items-center justify-between gap-2 shadow-xs border-b border-amber-600 no-print">
+          <div className="flex items-center gap-2 max-w-7xl mx-auto w-full justify-between">
+            <span className="flex items-center gap-1.5">
+              <Lock className="w-4 h-4 shrink-0" />
+              <span>
+                سیکیورٹی یاددہانی: آپ کا پاس ورڈ ڈیفالٹ ہے۔ اپنے کھاتے اور آرڈرز کو محفوظ رکھنے کے لیے نیا پاس ورڈ تبدیل کریں۔
+                <span className="hidden sm:inline font-normal text-slate-900 ml-1">
+                  (Please change your default PIN to secure your account)
+                </span>
+              </span>
+            </span>
+            <button
+              type="button"
+              onClick={openRoleModal}
+              className="px-2.5 py-1 bg-slate-950 text-white hover:bg-slate-900 rounded-md text-[11px] font-extrabold whitespace-nowrap cursor-pointer shrink-0 transition-colors"
+            >
+              پاس ورڈ تبدیل کریں (Change PIN)
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Main Content Body (USER DIRECTIVE: fix to all device friendly fix the paddings especially for mobile too) */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-2 sm:px-6 lg:px-8 py-3 sm:py-6">
+      <main className="flex-1 max-w-7xl w-full mx-auto px-3 sm:px-4 md:px-6 lg:px-8 py-3 sm:py-6">
         {/* 1. STORE & POS CATALOG VIEW (Default View Matching Screenshot) */}
         {currentTab === 'store' && (
           <StoreCatalogView
@@ -1156,13 +1207,15 @@ export default function App() {
           )
         )}
 
-        {/* MONTHLY STATEMENTS & WINNING AMOUNTS VIEW (USER DIRECTIVE) */}
+        {/* MONTHLY STATEMENTS & WINNING AMOUNTS VIEW (USER DIRECTIVE: customer scoped) */}
         {currentTab === 'monthly_statement' && (
           <MonthlyStatementView
             customers={customers}
             transactions={transactions}
             luckyDraws={luckyDraws}
             profile={profile}
+            userRole={activeRole}
+            currentUser={currentUser}
           />
         )}
 
@@ -1407,22 +1460,23 @@ export default function App() {
         )}
       </main>
 
-      {/* Pakistani Business Footer matching user phone 0312 5256 266 */}
+      {/* Pakistani Business Footer (USER DIRECTIVE: hide payment phone numbers from footer, use single number only in checkout) */}
       <footer className="border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900 py-4 no-print transition-colors">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between text-xs text-slate-500 dark:text-slate-400 gap-3">
+        <div className="max-w-7xl mx-auto px-3 sm:px-4 md:px-6 lg:px-8 flex flex-col sm:flex-row items-center justify-between text-xs text-slate-500 dark:text-slate-400 gap-3">
           <div className="flex flex-wrap items-center gap-2">
             <span className="font-extrabold text-slate-900 dark:text-white">100DAGAR</span>
             <span>·</span>
-            <span className="font-urdu font-bold text-amber-600 dark:text-amber-400">مدینہ مارکیٹ لاہور</span>
-            <span>·</span>
-            <span className="inline-flex items-center gap-1 font-mono text-[11px] text-emerald-800 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/60 px-2.5 py-0.5 rounded-md font-bold">
-              EasyPaisa: 0312 5256 266
+            <span className="inline-flex items-center gap-1 font-semibold text-[11px] text-emerald-800 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/60 px-2.5 py-0.5 rounded-md">
+              EasyPaisa Verified
             </span>
-            <span className="inline-flex items-center gap-1 font-mono text-[11px] text-red-800 dark:text-red-300 bg-red-50 dark:bg-red-950/60 px-2.5 py-0.5 rounded-md font-bold">
-              JazzCash: 0312 5256 266
+            <span className="inline-flex items-center gap-1 font-semibold text-[11px] text-red-800 dark:text-red-300 bg-red-50 dark:bg-red-950/60 px-2.5 py-0.5 rounded-md">
+              JazzCash Verified
             </span>
-            <span className="inline-flex items-center gap-1 font-mono text-[11px] text-blue-800 dark:text-blue-300 bg-blue-50 dark:bg-blue-950/60 px-2.5 py-0.5 rounded-md font-bold">
-              SadaPay: 0312 5256 266 (@100dagar)
+            <span className="inline-flex items-center gap-1 font-semibold text-[11px] text-blue-800 dark:text-blue-300 bg-blue-50 dark:bg-blue-950/60 px-2.5 py-0.5 rounded-md">
+              SadaPay Verified
+            </span>
+            <span className="inline-flex items-center gap-1 font-semibold text-[11px] text-slate-800 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 px-2.5 py-0.5 rounded-md">
+              Cash on Delivery (COD) Available
             </span>
           </div>
           <div className="flex items-center gap-2 text-[11px]">
