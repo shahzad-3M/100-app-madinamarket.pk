@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { Lock, ShieldAlert } from 'lucide-react';
 import {
   AgeGroupType,
   AppUser,
@@ -27,11 +28,13 @@ import {
   WhatsAppNotification,
 } from './types';
 import {
+  defaultCustomerUser,
   getActiveRole,
   getAttendance,
   getBroadcastContacts,
   getBusinessProfile,
   getCODOrders,
+  getCurrentUser,
   getCustomers,
   getEmployees,
   getLuckyDraws,
@@ -49,6 +52,7 @@ import {
   saveBroadcastContacts,
   saveBusinessProfile,
   saveCODOrders,
+  saveCurrentUser,
   saveCustomers,
   saveEmployees,
   saveLuckyDraws,
@@ -125,15 +129,14 @@ export default function App() {
   const [attendance, setAttendance] = useState<AttendanceRecord[]>(getAttendance);
   const [resellers, setResellers] = useState<Reseller[]>(getResellers);
   const [activeRole, setActiveRole] = useState<UserRole>(getActiveRole);
-  const [currentUser, setCurrentUser] = useState<AppUser>(() => ({
-    id: 'user_1',
-    name: 'Al-Haj Muhammad Asif',
-    urduName: 'الحاج محمد آصف (مالک)',
-    role: getActiveRole(),
-    phone: '03125256266',
-    resellerCode: 'RES-100D-01',
-  }));
+  const [currentUser, setCurrentUser] = useState<AppUser>(getCurrentUser);
   const [isRoleModalOpen, setIsRoleModalOpen] = useState(false);
+  const [loginModalInitialTab, setLoginModalInitialTab] = useState<'customer' | 'admin' | 'reseller'>('customer');
+
+  const openRoleModal = (tab: 'customer' | 'admin' | 'reseller' = 'customer') => {
+    setLoginModalInitialTab(tab);
+    setIsRoleModalOpen(true);
+  };
 
   // POS / Sale Cart State
   const [cart, setCart] = useState<CartItem[]>([]);
@@ -251,6 +254,12 @@ export default function App() {
     setEmployees(emps);
     setAttendance(atts);
     setResellers(resells);
+
+    const actRole = getActiveRole();
+    const curUser = getCurrentUser();
+    setActiveRole(actRole);
+    setCurrentUser(curUser);
+    setViewMode(actRole === 'customer' ? 'customer' : 'merchant');
   };
 
   const handleSaveBroadcastContact = (contact: BroadcastContact) => {
@@ -646,19 +655,68 @@ export default function App() {
     alert(`کامیابی سے رقم Rs. ${amount.toLocaleString('en-PK')} کمیشن واؤچر جاری کر دیا گیا!`);
   };
 
-  // USER ROLE SELECTION HANDLER
-  const handleSelectRole = (newRole: UserRole) => {
+  // USER ROLE SELECTION & LOGIN HANDLER
+  const handleSelectRole = (newRole: UserRole, userDetails?: Partial<AppUser>) => {
     setActiveRole(newRole);
     saveActiveRole(newRole);
-    setCurrentUser((prev) => ({ ...prev, role: newRole }));
+
+    let updatedUser: AppUser;
+    if (userDetails) {
+      updatedUser = {
+        ...currentUser,
+        ...userDetails,
+        role: newRole,
+      };
+    } else if (newRole === 'admin') {
+      updatedUser = {
+        id: 'user_admin_1',
+        name: 'Al-Haj Muhammad Asif',
+        urduName: 'الحاج محمد آصف (اسٹور مالک و ایڈمن)',
+        role: 'admin',
+        phone: '03125256266',
+        resellerCode: 'RES-100D-01',
+      };
+    } else if (newRole === 'reseller') {
+      updatedUser = {
+        id: 'user_reseller_1',
+        name: 'Usman Ghani',
+        urduName: 'عثمان غنی (ری سیلر)',
+        role: 'reseller',
+        phone: '03125256266',
+        resellerCode: 'RES-100D-01',
+      };
+    } else {
+      updatedUser = {
+        id: 'user_cust_default',
+        name: 'Online Customer',
+        urduName: 'آن لائن کسٹمر',
+        role: 'customer',
+        phone: '03125256266',
+        customerId: customers[0]?.id || 'cust_1',
+      };
+    }
+
+    setCurrentUser(updatedUser);
+    saveCurrentUser(updatedUser);
 
     if (newRole === 'customer') {
       setViewMode('customer');
-      if (currentTab !== 'store' && currentTab !== 'lucky_draw' && currentTab !== 'monthly_statement') {
+      if (currentTab !== 'store' && currentTab !== 'lucky_draw' && currentTab !== 'monthly_statement' && currentTab !== 'resellers') {
         setCurrentTab('store');
       }
     } else {
       setViewMode('merchant');
+    }
+  };
+
+  const handleLogout = () => {
+    setActiveRole('customer');
+    saveActiveRole('customer');
+    setCurrentUser(defaultCustomerUser);
+    saveCurrentUser(defaultCustomerUser);
+    setViewMode('customer');
+    if (currentTab !== 'store' && currentTab !== 'lucky_draw' && currentTab !== 'monthly_statement' && currentTab !== 'resellers') {
+      setCurrentTab('store');
     }
   };
 
@@ -1010,11 +1068,12 @@ export default function App() {
         viewMode={viewMode}
         onToggleViewMode={setViewMode}
         userRole={activeRole}
-        onOpenRoleModal={() => setIsRoleModalOpen(true)}
+        currentUser={currentUser}
+        onOpenRoleModal={openRoleModal}
       />
 
-      {/* Main Content Body */}
-      <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6">
+      {/* Main Content Body (USER DIRECTIVE: fix to all device friendly fix the paddings especially for mobile too) */}
+      <main className="flex-1 max-w-7xl w-full mx-auto px-2 sm:px-6 lg:px-8 py-3 sm:py-6">
         {/* 1. STORE & POS CATALOG VIEW (Default View Matching Screenshot) */}
         {currentTab === 'store' && (
           <StoreCatalogView
@@ -1037,6 +1096,7 @@ export default function App() {
             }}
             isCustomerView={viewMode === 'customer' || activeRole === 'customer'}
             hideCostPrice={viewMode === 'customer' || activeRole === 'customer'}
+            userRole={activeRole}
           />
         )}
 
@@ -1065,16 +1125,36 @@ export default function App() {
           />
         )}
 
-        {/* RESELLERS AFFILIATE COMMISSION PORTAL (USER DIRECTIVE: resallers account which is commission based 30 Rupees on sale of 1000 rupes only payment able on paid amount) */}
+        {/* RESELLERS AFFILIATE COMMISSION PORTAL (USER DIRECTIVE: do not public resallers information only for resaller of admin) */}
         {currentTab === 'resellers' && (
-          <ResellersView
-            resellers={resellers}
-            profile={profile}
-            onSaveReseller={handleSaveReseller}
-            onPayoutCommission={handlePayoutCommission}
-            isResellerRole={activeRole === 'reseller'}
-            activeResellerCode={currentUser.resellerCode}
-          />
+          activeRole === 'customer' ? (
+            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-6 sm:p-10 text-center max-w-md mx-auto space-y-3 shadow-xs my-8">
+              <div className="w-12 h-12 rounded-full bg-amber-100 dark:bg-amber-950 text-amber-700 dark:text-amber-300 flex items-center justify-center mx-auto">
+                <Lock className="w-6 h-6" />
+              </div>
+              <h2 className="text-base font-bold text-slate-900 dark:text-white">
+                Reseller Portal Restricted / ری سیلر پورٹل
+              </h2>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                Reseller accounts and commission ledgers are private and accessible only by registered reseller partners and store administration.
+              </p>
+              <button
+                onClick={() => setCurrentTab('store')}
+                className="px-4 py-2 bg-slate-900 text-white dark:bg-amber-500 dark:text-slate-950 rounded-lg text-xs font-bold cursor-pointer"
+              >
+                Back to Market Catalog (مارکیٹ پر جائیں)
+              </button>
+            </div>
+          ) : (
+            <ResellersView
+              resellers={resellers}
+              profile={profile}
+              onSaveReseller={handleSaveReseller}
+              onPayoutCommission={handlePayoutCommission}
+              isResellerRole={activeRole === 'reseller'}
+              activeResellerCode={currentUser.resellerCode}
+            />
+          )
         )}
 
         {/* MONTHLY STATEMENTS & WINNING AMOUNTS VIEW (USER DIRECTIVE) */}
@@ -1312,6 +1392,18 @@ export default function App() {
               saveBusinessProfile(updated);
             }}
             onRefreshAllData={handleRefreshAllData}
+            customers={customers}
+            resellers={resellers}
+            onUpdateCustomer={(updatedCust) => {
+              const updated = customers.map((c) => (c.id === updatedCust.id ? updatedCust : c));
+              setCustomers(updated);
+              saveCustomers(updated);
+            }}
+            onUpdateReseller={(updatedReseller) => {
+              const updated = resellers.map((r) => (r.id === updatedReseller.id ? updatedReseller : r));
+              setResellers(updated);
+              saveResellers(updated);
+            }}
           />
         )}
       </main>
@@ -1337,6 +1429,16 @@ export default function App() {
           <div className="flex items-center gap-2 text-[11px]">
             <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
             <span>۳ روزہ نرم یاددہانی، تاریخ ادائیگی اور لکی ڈرا سسٹم فعال</span>
+            <span className="text-slate-300 dark:text-slate-700">·</span>
+            <button
+              onClick={() => {
+                setLoginModalInitialTab('admin');
+                setIsRoleModalOpen(true);
+              }}
+              className="text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 underline cursor-pointer"
+            >
+              Staff / Admin Portal
+            </button>
           </div>
         </div>
       </footer>
@@ -1351,6 +1453,7 @@ export default function App() {
           profile={profile}
           isCustomerView={viewMode === 'customer' || activeRole === 'customer'}
           isAdmin={activeRole === 'admin'}
+          currentUser={currentUser}
           onCompleteSale={handleCompleteSale}
         />
       )}
@@ -1360,7 +1463,11 @@ export default function App() {
         isOpen={isRoleModalOpen}
         onClose={() => setIsRoleModalOpen(false)}
         currentUser={currentUser}
+        customers={customers}
+        resellers={resellers}
         onSelectRole={handleSelectRole}
+        onLogout={handleLogout}
+        initialTab={loginModalInitialTab}
       />
 
       {/* STANDARD MODALS */}

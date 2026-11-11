@@ -43,6 +43,7 @@ interface StoreCatalogViewProps {
   onOpenImportModal?: () => void;
   isCustomerView?: boolean;
   hideCostPrice?: boolean;
+  userRole?: string;
 }
 
 export const StoreCatalogView: React.FC<StoreCatalogViewProps> = ({
@@ -62,6 +63,7 @@ export const StoreCatalogView: React.FC<StoreCatalogViewProps> = ({
   onOpenImportModal,
   isCustomerView = false,
   hideCostPrice = false,
+  userRole = 'customer',
 }) => {
   const [sortBy, setSortBy] = useState<'default' | 'winning_profit' | 'highest_savings' | 'price_low' | 'price_high'>('default');
   const [customerTypeFilter, setCustomerTypeFilter] = useState<'all' | 'individual' | 'retail'>('all');
@@ -222,8 +224,8 @@ export const StoreCatalogView: React.FC<StoreCatalogViewProps> = ({
             })}
           </nav>
 
-          {/* Quick Import from Website Button in Sidebar */}
-          {onOpenImportModal && (
+          {/* Quick Import from Website Button in Sidebar (USER DIRECTIVE: keep only visible import from website link for super admin hide for others) */}
+          {userRole === 'admin' && onOpenImportModal && (
             <div className="pt-2">
               <button
                 onClick={onOpenImportModal}
@@ -233,39 +235,41 @@ export const StoreCatalogView: React.FC<StoreCatalogViewProps> = ({
                 <span>Import from Website Link</span>
               </button>
               <span className="text-[10px] text-slate-400 text-center block mt-1">
-                ویب سائٹ لنک سے پراڈکٹ امپورٹ کریں
+                ویب سائٹ لنک سے پراڈکٹ امپورٹ کریں (ایڈمن)
               </span>
             </div>
           )}
 
-          {/* Customer Type Quick Selector */}
-          <div className="pt-3 border-t border-slate-100 dark:border-slate-800">
-            <span className="text-[10px] uppercase font-bold tracking-wider text-slate-400 block mb-2">
-              Customer Mode (کسٹمر کی قسم)
-            </span>
-            <div className="grid grid-cols-2 gap-1 p-1 bg-slate-100 dark:bg-slate-800 rounded-lg text-xs">
-              <button
-                onClick={() => setCustomerTypeFilter('individual')}
-                className={`py-1 px-2 rounded text-center font-medium cursor-pointer transition-colors ${
-                  customerTypeFilter === 'individual'
-                    ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-2xs font-bold'
-                    : 'text-slate-600 dark:text-slate-400'
-                }`}
-              >
-                Individual (انفرادی)
-              </button>
-              <button
-                onClick={() => setCustomerTypeFilter('retail')}
-                className={`py-1 px-2 rounded text-center font-medium cursor-pointer transition-colors ${
-                  customerTypeFilter === 'retail'
-                    ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-2xs font-bold'
-                    : 'text-slate-600 dark:text-slate-400'
-                }`}
-              >
-                Retail Store (ریٹیلر)
-              </button>
+          {/* Customer Type Quick Selector (Admin Only) */}
+          {!isCustomerView && userRole === 'admin' && (
+            <div className="pt-3 border-t border-slate-100 dark:border-slate-800">
+              <span className="text-[10px] uppercase font-bold tracking-wider text-slate-400 block mb-2">
+                Customer Mode (کسٹمر کی قسم)
+              </span>
+              <div className="grid grid-cols-2 gap-1 p-1 bg-slate-100 dark:bg-slate-800 rounded-lg text-xs">
+                <button
+                  onClick={() => setCustomerTypeFilter('individual')}
+                  className={`py-1 px-2 rounded text-center font-medium cursor-pointer transition-colors ${
+                    customerTypeFilter === 'individual'
+                      ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-2xs font-bold'
+                      : 'text-slate-600 dark:text-slate-400'
+                  }`}
+                >
+                  Individual (انفرادی)
+                </button>
+                <button
+                  onClick={() => setCustomerTypeFilter('retail')}
+                  className={`py-1 px-2 rounded text-center font-medium cursor-pointer transition-colors ${
+                    customerTypeFilter === 'retail'
+                      ? 'bg-white dark:bg-slate-700 text-slate-900 dark:text-white shadow-2xs font-bold'
+                      : 'text-slate-600 dark:text-slate-400'
+                  }`}
+                >
+                  Retail Store (ریٹیلر)
+                </button>
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Payment Terms Info Card */}
           <div className="bg-slate-50 dark:bg-slate-850 p-3 rounded-lg border border-slate-200 dark:border-slate-800 text-[11px] text-slate-600 dark:text-slate-400 space-y-1">
@@ -319,8 +323,8 @@ export const StoreCatalogView: React.FC<StoreCatalogViewProps> = ({
             </div>
           </div>
 
-          {/* PRODUCT CARDS GRID (Matching Screenshot Layout & Card Design) */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+          {/* PRODUCT CARDS GRID (USER DIRECTIVE: show two products in row on mobile & fix device paddings) */}
+          <div className="grid grid-cols-2 gap-2 sm:gap-4 md:grid-cols-3 xl:grid-cols-4">
             {filteredProducts.map((product) => {
               const savings = product.marketPrice - product.ourPrice;
               const savingsPercent = Math.round((savings / product.marketPrice) * 100);
@@ -331,10 +335,10 @@ export const StoreCatalogView: React.FC<StoreCatalogViewProps> = ({
                   key={product.id}
                   className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden hover:shadow-md transition-all flex flex-col justify-between group"
                 >
-                  {/* Top Image or Header Bar */}
+                  {/* Top Image */}
                   <div
                     onClick={() => setSelectedDetailProduct(product)}
-                    className="relative bg-slate-100 dark:bg-slate-800 h-44 overflow-hidden flex items-center justify-center cursor-pointer"
+                    className="relative bg-slate-100 dark:bg-slate-800 h-32 sm:h-44 overflow-hidden flex items-center justify-center cursor-pointer"
                   >
                     {product.imageUrl ? (
                       <img
@@ -345,26 +349,26 @@ export const StoreCatalogView: React.FC<StoreCatalogViewProps> = ({
                       />
                     ) : (
                       <div className="text-slate-400 text-xs flex flex-col items-center gap-1 font-mono">
-                        <ShoppingBag className="w-8 h-8 opacity-40" />
-                        <span>100DAGAR Lot</span>
+                        <ShoppingBag className="w-6 h-6 sm:w-8 sm:h-8 opacity-40" />
+                        <span className="text-[10px]">100DAGAR Lot</span>
                       </div>
                     )}
 
-                    {/* Green Discount Badge (Exact screenshot format -50%, -53%, -61%) */}
-                    <div className="absolute top-2 left-2 flex flex-col gap-1 items-start">
-                      <span className="bg-emerald-600 text-white font-extrabold text-[11px] px-2 py-0.5 rounded shadow-xs">
+                    {/* Green Discount Badge */}
+                    <div className="absolute top-1.5 left-1.5 sm:top-2 sm:left-2 flex flex-col gap-1 items-start">
+                      <span className="bg-emerald-600 text-white font-extrabold text-[9px] sm:text-[11px] px-1.5 sm:px-2 py-0.5 rounded shadow-xs">
                         -{savingsPercent}%
                       </span>
                       {product.isWinningItem && (
-                        <span className="bg-amber-500 text-slate-950 font-bold text-[9px] px-1.5 py-0.2 rounded shadow-xs flex items-center gap-0.5">
-                          <Sparkles className="w-2.5 h-2.5" /> WINNING ITEM
+                        <span className="bg-amber-500 text-slate-950 font-bold text-[8px] sm:text-[9px] px-1 sm:px-1.5 py-0.2 rounded shadow-xs flex items-center gap-0.5">
+                          <Sparkles className="w-2 h-2 sm:w-2.5 sm:h-2.5" /> WINNING
                         </span>
                       )}
                     </div>
 
                     {/* Stock Alert Badge */}
-                    <div className="absolute top-2 right-2">
-                      <span className={`text-[10px] font-mono px-2 py-0.5 rounded font-bold ${
+                    <div className="absolute top-1.5 right-1.5 sm:top-2 sm:right-2">
+                      <span className={`text-[8px] sm:text-[10px] font-mono px-1.5 sm:px-2 py-0.5 rounded font-bold ${
                         product.stockQty <= product.minStockAlert
                           ? 'bg-red-500 text-white'
                           : 'bg-slate-900/80 text-white backdrop-blur-xs'
@@ -375,17 +379,17 @@ export const StoreCatalogView: React.FC<StoreCatalogViewProps> = ({
                   </div>
 
                   {/* Content Area */}
-                  <div className="p-4 flex-1 flex flex-col justify-between space-y-2.5">
+                  <div className="p-2.5 sm:p-4 flex-1 flex flex-col justify-between space-y-2">
                     <div>
                       {/* Category kicker */}
-                      <span className="text-[11px] text-slate-400 dark:text-slate-500 block truncate">
-                        {product.category}, For you, Wholesale
+                      <span className="text-[10px] sm:text-[11px] text-slate-400 dark:text-slate-500 block truncate">
+                        {product.category}
                       </span>
 
-                      {/* Title Link in Blue (Exact screenshot style) */}
+                      {/* Title */}
                       <h3
                         onClick={() => setSelectedDetailProduct(product)}
-                        className="text-xs font-bold text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 line-clamp-2 mt-0.5 cursor-pointer leading-tight"
+                        className="text-[11px] sm:text-xs font-bold text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 line-clamp-2 mt-0.5 cursor-pointer leading-tight"
                         title={product.name}
                       >
                         {product.name}
@@ -393,40 +397,40 @@ export const StoreCatalogView: React.FC<StoreCatalogViewProps> = ({
 
                       {/* Urdu Name */}
                       {product.urduName && (
-                        <p className="font-urdu text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 leading-snug">
+                        <p className="font-urdu text-[10px] sm:text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 truncate leading-snug">
                           {product.urduName}
                         </p>
                       )}
                     </div>
 
                     {/* Pricing Block with Market Price, Our Price & Customer Savings */}
-                    <div className="pt-2 border-t border-slate-100 dark:border-slate-800">
-                      <div className="flex items-baseline gap-2">
+                    <div className="pt-1.5 sm:pt-2 border-t border-slate-100 dark:border-slate-800">
+                      <div className="flex items-baseline gap-1.5 sm:gap-2">
                         {/* Our Price */}
-                        <span className="text-base font-extrabold text-slate-900 dark:text-white font-mono tabular-nums">
+                        <span className="text-sm sm:text-base font-extrabold text-slate-900 dark:text-white font-mono tabular-nums">
                           {profile.currencySymbol}{product.ourPrice.toLocaleString('en-PK')}
                         </span>
 
                         {/* Strikethrough Market Price */}
-                        <span className="text-xs text-slate-400 line-through font-mono tabular-nums">
+                        <span className="text-[10px] sm:text-xs text-slate-400 line-through font-mono tabular-nums">
                           {profile.currencySymbol}{product.marketPrice.toLocaleString('en-PK')}
                         </span>
                       </div>
 
-                      {/* Customer Savings Highlight Badge (Prominently requested by user) */}
-                      <div className="mt-1 flex items-center justify-between text-[11px] font-medium bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300 px-2 py-1 rounded">
-                        <span>کسٹمر بچت (Customer Saves):</span>
-                        <span className="font-mono font-bold">
-                          {profile.currencySymbol}{savings.toLocaleString('en-PK')} ({savingsPercent}%)
+                      {/* Customer Savings Highlight Badge */}
+                      <div className="mt-1 flex items-center justify-between text-[9px] sm:text-[11px] font-medium bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300 px-1.5 sm:px-2 py-0.5 sm:py-1 rounded">
+                        <span className="truncate">بچت (Save):</span>
+                        <span className="font-mono font-bold shrink-0">
+                          {profile.currencySymbol}{savings.toLocaleString('en-PK')}
                         </span>
                       </div>
 
                       {/* Profit Metrics for Store Manager (STRICTLY HIDDEN IN CUSTOMER VIEW!) */}
                       {!isCustomerView && !hideCostPrice && (
-                        <div className="mt-1 flex items-center justify-between text-[10px] text-slate-400">
+                        <div className="mt-1 flex items-center justify-between text-[9px] text-slate-400">
                           <span>Cost: {profile.currencySymbol}{product.costPrice.toLocaleString('en-PK')}</span>
                           <span className="text-amber-600 dark:text-amber-400 font-medium">
-                            Profit: {profile.currencySymbol}{(product.ourPrice - product.costPrice).toLocaleString('en-PK')}/unit
+                            +{profile.currencySymbol}{(product.ourPrice - product.costPrice).toLocaleString('en-PK')}
                           </span>
                         </div>
                       )}
@@ -436,10 +440,10 @@ export const StoreCatalogView: React.FC<StoreCatalogViewProps> = ({
                     <button
                       type="button"
                       onClick={() => setSelectedDetailProduct(product)}
-                      className="w-full inline-flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-lg bg-amber-50 hover:bg-amber-100 dark:bg-amber-950/30 dark:hover:bg-amber-900/50 text-amber-900 dark:text-amber-200 text-[11px] font-bold transition-colors cursor-pointer border border-amber-200/80 dark:border-amber-900"
+                      className="w-full inline-flex items-center justify-center gap-1 py-1 sm:py-1.5 px-2 rounded-lg bg-amber-50 hover:bg-amber-100 dark:bg-amber-950/30 dark:hover:bg-amber-900/50 text-amber-900 dark:text-amber-200 text-[10px] sm:text-[11px] font-bold transition-colors cursor-pointer border border-amber-200/80 dark:border-amber-900 truncate"
                     >
-                      <Eye className="w-3.5 h-3.5 text-amber-600" />
-                      <span>View Specs, Sizes &amp; Pictures (مکمل تفصیل)</span>
+                      <Eye className="w-3 h-3 text-amber-600 shrink-0" />
+                      <span className="truncate">Specs &amp; Photos (تفصیل)</span>
                     </button>
 
                     {/* Website Link (User requirement: keep website link to see more details) */}
@@ -448,42 +452,41 @@ export const StoreCatalogView: React.FC<StoreCatalogViewProps> = ({
                         href={product.websiteUrl}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="w-full inline-flex items-center justify-center gap-1.5 py-1.5 px-3 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-blue-600 dark:text-blue-400 text-[11px] font-semibold transition-colors cursor-pointer"
+                        className="w-full inline-flex items-center justify-center gap-1 py-1 sm:py-1.5 px-2 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-blue-600 dark:text-blue-400 text-[10px] sm:text-[11px] font-semibold transition-colors cursor-pointer truncate"
                         onClick={(e) => e.stopPropagation()}
                       >
-                        <ExternalLink className="w-3 h-3 text-blue-500" />
-                        <span>See on Website (ویب سائٹ پر دیکھیں)</span>
+                        <ExternalLink className="w-3 h-3 text-blue-500 shrink-0" />
+                        <span className="truncate">View on Website</span>
                       </a>
                     )}
 
                     {/* Action Bar: Add to Cart / Sell */}
-                    <div className="pt-1 flex items-center justify-between gap-2">
+                    <div className="pt-0.5 flex items-center justify-between gap-1.5">
                       {inCart ? (
-                        <div className="w-full flex items-center justify-between bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700 rounded-lg p-1">
+                        <div className="w-full flex items-center justify-between bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700 rounded-lg p-0.5 sm:p-1">
                           <button
                             onClick={() => onUpdateCartQty(product.id, inCart.quantity - 1)}
-                            className="w-7 h-7 flex items-center justify-center bg-white dark:bg-slate-800 text-slate-800 dark:text-white rounded shadow-2xs hover:bg-slate-100 cursor-pointer"
+                            className="w-6 h-6 sm:w-7 sm:h-7 flex items-center justify-center bg-white dark:bg-slate-800 text-slate-800 dark:text-white rounded shadow-2xs hover:bg-slate-100 cursor-pointer"
                           >
-                            <Minus className="w-3.5 h-3.5" />
+                            <Minus className="w-3 h-3" />
                           </button>
-                          <span className="font-mono font-bold text-xs text-amber-900 dark:text-amber-200">
+                          <span className="font-mono font-bold text-[11px] sm:text-xs text-amber-900 dark:text-amber-200">
                             {inCart.quantity} in cart
                           </span>
                           <button
                             onClick={() => onUpdateCartQty(product.id, inCart.quantity + 1)}
-                            className="w-7 h-7 flex items-center justify-center bg-amber-500 text-slate-900 rounded shadow-2xs hover:bg-amber-400 cursor-pointer"
+                            className="w-6 h-6 sm:w-7 sm:h-7 flex items-center justify-center bg-amber-500 text-slate-900 rounded shadow-2xs hover:bg-amber-400 cursor-pointer"
                           >
-                            <Plus className="w-3.5 h-3.5" />
+                            <Plus className="w-3 h-3" />
                           </button>
                         </div>
                       ) : (
                         <button
                           onClick={() => onAddToCart(product, 1)}
-                          className="w-full inline-flex items-center justify-center gap-1.5 py-2 px-3 bg-slate-900 hover:bg-slate-800 dark:bg-amber-500 dark:text-slate-950 dark:hover:bg-amber-400 text-white text-xs font-bold rounded-lg shadow-2xs transition-colors cursor-pointer"
+                          className="w-full inline-flex items-center justify-center gap-1 py-1.5 sm:py-2 px-2.5 bg-slate-900 hover:bg-slate-800 dark:bg-amber-500 dark:text-slate-950 dark:hover:bg-amber-400 text-white text-[11px] sm:text-xs font-bold rounded-lg shadow-2xs transition-colors cursor-pointer"
                         >
-                          <ShoppingBag className="w-3.5 h-3.5" />
-                          <span>Add to Sale Cart</span>
-                          <ArrowRight className="w-3 h-3 ml-auto opacity-70" />
+                          <ShoppingBag className="w-3 h-3 sm:w-3.5 sm:h-3.5 shrink-0" />
+                          <span>Add to Cart</span>
                         </button>
                       )}
                     </div>

@@ -68,6 +68,10 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
   const [isImportLoading, setIsImportLoading] = useState(false);
   const [parsedProductPreview, setParsedProductPreview] = useState<ProductItem | null>(null);
   const [importSuccessAlert, setImportSuccessAlert] = useState(false);
+  const [importCategoryMode, setImportCategoryMode] = useState<'existing' | 'new'>('existing');
+  const [importSelectedCategory, setImportSelectedCategory] = useState<string>('');
+  const [importNewCategoryName, setImportNewCategoryName] = useState<string>('');
+  const [importParentCategory, setImportParentCategory] = useState<string>('');
 
   // Synchronize external import trigger if provided
   React.useEffect(() => {
@@ -374,19 +378,38 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
       };
 
       setParsedProductPreview(preview);
+      setImportSelectedCategory(preview.category);
+      setImportNewCategoryName('');
       setIsImportLoading(false);
     }, 700);
   };
 
   const handleConfirmImport = () => {
     if (!parsedProductPreview) return;
-    onSaveProduct(parsedProductPreview);
+
+    const finalCategory =
+      importCategoryMode === 'new'
+        ? (importNewCategoryName.trim() || 'General')
+        : (importSelectedCategory || parsedProductPreview.category || 'General');
+
+    const categoryWithParent = importParentCategory.trim()
+      ? `${importParentCategory.trim()} > ${finalCategory}`
+      : finalCategory;
+
+    const productToSave: ProductItem = {
+      ...parsedProductPreview,
+      category: categoryWithParent,
+    };
+
+    onSaveProduct(productToSave);
     setImportSuccessAlert(true);
     setTimeout(() => {
       setImportSuccessAlert(false);
       setIsImportModalOpen(false);
       setParsedProductPreview(null);
       setImportUrl('');
+      setImportNewCategoryName('');
+      setImportParentCategory('');
       if (onCloseExternalImport) onCloseExternalImport();
     }, 1200);
   };
@@ -1019,6 +1042,106 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                           </span>
                         </div>
                       </div>
+                    </div>
+                  </div>
+
+                  {/* USER DIRECTIVE: option to select existing catagories or create new catagory to group all products in parent catagory */}
+                  <div className="p-3 bg-slate-50 dark:bg-slate-850 rounded-xl border border-slate-200 dark:border-slate-700 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-slate-800 dark:text-slate-200 text-xs">
+                        Product Category &amp; Parent Grouping (کیٹیگری تفویض کریں):
+                      </span>
+                      <div className="flex rounded-lg border border-slate-300 dark:border-slate-600 p-0.5 text-[11px] bg-white dark:bg-slate-800">
+                        <button
+                          type="button"
+                          onClick={() => setImportCategoryMode('existing')}
+                          className={`px-2.5 py-0.5 rounded font-medium transition-colors cursor-pointer ${
+                            importCategoryMode === 'existing'
+                              ? 'bg-amber-500 text-slate-950 font-bold shadow-xs'
+                              : 'text-slate-600 dark:text-slate-300'
+                          }`}
+                        >
+                          Select Existing
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setImportCategoryMode('new')}
+                          className={`px-2.5 py-0.5 rounded font-medium transition-colors cursor-pointer ${
+                            importCategoryMode === 'new'
+                              ? 'bg-amber-500 text-slate-950 font-bold shadow-xs'
+                              : 'text-slate-600 dark:text-slate-300'
+                          }`}
+                        >
+                          Create New Category
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      {/* Existing or New Category Field */}
+                      <div>
+                        {importCategoryMode === 'existing' ? (
+                          <div>
+                            <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">
+                              Choose Existing Store Category:
+                            </label>
+                            <select
+                              value={importSelectedCategory}
+                              onChange={(e) => setImportSelectedCategory(e.target.value)}
+                              className="w-full px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-xs font-semibold focus:ring-2 focus:ring-amber-400 focus:outline-hidden"
+                            >
+                              {categories.map((c) => (
+                                <option key={c} value={c}>
+                                  {c}
+                                </option>
+                              ))}
+                              {!categories.includes(parsedProductPreview.category) && (
+                                <option value={parsedProductPreview.category}>
+                                  {parsedProductPreview.category} (Detected from link)
+                                </option>
+                              )}
+                            </select>
+                          </div>
+                        ) : (
+                          <div>
+                            <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">
+                              Enter New Category Name:
+                            </label>
+                            <input
+                              type="text"
+                              required
+                              placeholder="e.g. Kitchenware, Bathroom Essentials, Wall Decor"
+                              value={importNewCategoryName}
+                              onChange={(e) => setImportNewCategoryName(e.target.value)}
+                              className="w-full px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-xs font-medium focus:ring-2 focus:ring-amber-400 focus:outline-hidden"
+                            />
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Parent Category Grouping Field */}
+                      <div>
+                        <label className="block text-[11px] font-semibold text-slate-600 dark:text-slate-400 mb-1">
+                          Parent Category Grouping (اختیاری - مرکزی کیٹیگری گروپ):
+                        </label>
+                        <input
+                          type="text"
+                          placeholder="e.g. Wholesale Lots, Household, Fashion, Gadgets"
+                          value={importParentCategory}
+                          onChange={(e) => setImportParentCategory(e.target.value)}
+                          className="w-full px-3 py-1.5 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-xs font-medium focus:ring-2 focus:ring-amber-400 focus:outline-hidden"
+                        />
+                      </div>
+                    </div>
+
+                    <div className="text-[10px] text-slate-500 flex items-center gap-1.5">
+                      <span className="font-bold">Final Category Path:</span>
+                      <span className="font-mono text-amber-700 dark:text-amber-300 font-bold">
+                        {importParentCategory.trim() ? `${importParentCategory.trim()} > ` : ''}
+                        {importCategoryMode === 'new'
+                          ? (importNewCategoryName.trim() || 'New Category')
+                          : (importSelectedCategory || parsedProductPreview.category)}
+                      </span>
                     </div>
                   </div>
 

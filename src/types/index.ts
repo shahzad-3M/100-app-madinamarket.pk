@@ -24,6 +24,7 @@ export interface Customer {
   cnic?: string; // Pakistani Computerized National Identity Card
   creditLimit: number;
   paymentTermsDays: number; // e.g. 7, 14, 21, 30 days
+  pin?: string; // 6-digit security PIN (default: last 6 digits of mobile number)
   notes?: string;
   createdAt: string;
   balance: number; // positive: customer owes you (receivable); negative: you owe customer
@@ -219,6 +220,7 @@ export interface BusinessProfile {
   monthlyReminderDay: number; // e.g. 1st, 5th
   autoSendEnabled: boolean;
   defaultPaymentTermsDays: number;
+  adminPin?: string; // Owner Master PIN (default: '580987', resettable in settings)
 }
 
 export interface ReminderTemplate {
@@ -439,6 +441,7 @@ export interface Reseller {
   totalPaidSales: number;
   earnedCommission: number; // Rs. 30 per 1000 on paid amount
   paidCommission: number;
+  pin?: string; // 6-digit PIN (default: last 6 digits of phone)
   status: 'active' | 'inactive';
   createdAt: string;
 }
@@ -459,4 +462,19 @@ export interface ReviewRewardSubmission {
   createdAt: string;
   approvedAt?: string;
 }
+
+// LOGIN SECURITY & AUDIT RECORD
+export interface LoginAuditRecord {
+  id: string;
+  userId?: string;
+  userName: string;
+  phone: string;
+  role: UserRole;
+  timestamp: string; // ISO string
+  status: 'success' | 'failed';
+  ipOrDevice?: string;
+  notes?: string;
+  usedPin?: string;
+}
+
 

@@ -1,10 +1,12 @@
 import {
+  AppUser,
   AttendanceRecord,
   BroadcastContact,
   BusinessProfile,
   CODOrder,
   Customer,
   Employee,
+  LoginAuditRecord,
   LuckyDrawEvent,
   ProductBroadcast,
   ProductItem,
@@ -24,6 +26,7 @@ import {
   defaultCODOrders,
   defaultCustomers,
   defaultEmployees,
+  defaultLoginAuditLogs,
   defaultLuckyDrawEvents,
   defaultProductBroadcasts,
   defaultProducts,
@@ -54,6 +57,8 @@ const STORAGE_KEYS = {
   RESELLERS: '100dagar_resellers_v5',
   REVIEW_REWARDS: '100dagar_review_rewards_v5',
   ACTIVE_ROLE: '100dagar_active_role_v5',
+  CURRENT_USER: '100dagar_current_user_v5',
+  LOGIN_AUDITS: '100dagar_login_audits_v5',
 };
 
 // Safe localStorage getter
@@ -82,6 +87,9 @@ export function getBusinessProfile(): BusinessProfile {
   const prof = loadFromStorage<BusinessProfile>(STORAGE_KEYS.PROFILE, defaultBusinessProfile);
   if (!prof.shippingPartner) {
     prof.shippingPartner = defaultBusinessProfile.shippingPartner;
+  }
+  if (!prof.adminPin) {
+    prof.adminPin = '580987';
   }
   return prof;
 }
@@ -225,14 +233,86 @@ export function saveReviewRewards(submissions: ReviewRewardSubmission[]): void {
   saveToStorage(STORAGE_KEYS.REVIEW_REWARDS, submissions);
 }
 
-// Active Role
+export const defaultCustomerUser: AppUser = {
+  id: 'user_cust_default',
+  name: 'Online Customer',
+  urduName: 'آن لائن کسٹمر',
+  role: 'customer',
+  phone: '03125256266',
+  customerId: 'cust_1',
+};
+
+// Active Role & User Session (USER DIRECTIVE: Default to Customer)
 export function getActiveRole(): UserRole {
-  return loadFromStorage<UserRole>(STORAGE_KEYS.ACTIVE_ROLE, 'admin');
+  return loadFromStorage<UserRole>(STORAGE_KEYS.ACTIVE_ROLE, 'customer');
 }
 
 export function saveActiveRole(role: UserRole): void {
   saveToStorage(STORAGE_KEYS.ACTIVE_ROLE, role);
 }
+
+export function getCurrentUser(): AppUser {
+  return loadFromStorage<AppUser>(STORAGE_KEYS.CURRENT_USER, defaultCustomerUser);
+}
+
+export function saveCurrentUser(user: AppUser): void {
+  saveToStorage(STORAGE_KEYS.CURRENT_USER, user);
+}
+
+// Login Audits & History (USER DIRECTIVE: history of all users pin and login information inside admin area)
+export function getLoginAudits(): LoginAuditRecord[] {
+  return loadFromStorage<LoginAuditRecord[]>(STORAGE_KEYS.LOGIN_AUDITS, defaultLoginAuditLogs);
+}
+
+export function logUserLogin(record: Omit<LoginAuditRecord, 'id' | 'timestamp'>): void {
+  const newEntry: LoginAuditRecord = {
+    ...record,
+    id: `login_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+    timestamp: new Date().toISOString(),
+  };
+  const currentLogs = getLoginAudits();
+  saveToStorage(STORAGE_KEYS.LOGIN_AUDITS, [newEntry, ...currentLogs.slice(0, 99)]);
+}
+
+export function saveLoginAudits(logs: LoginAuditRecord[]): void {
+  saveToStorage(STORAGE_KEYS.LOGIN_AUDITS, logs);
+}
+
+// Default PIN extraction from mobile number (USER DIRECTIVE: default pin suggestion 6 digits can be last 6 digits of mobile number)
+export function getDefaultPinForPhone(phone: string): string {
+  const digits = phone.replace(/\D/g, '');
+  if (digits.length >= 6) {
+    return digits.slice(-6);
+  }
+  return digits.padEnd(6, '0');
+}
+
+// User PIN update functions (USER DIRECTIVE: only show to user inside portal change pin option)
+export function updateCustomerPin(customerId: string, newPin: string): boolean {
+  const custs = getCustomers();
+  const updated = custs.map((c) => (c.id === customerId ? { ...c, pin: newPin } : c));
+  saveCustomers(updated);
+  return true;
+}
+
+export function updateResellerPin(resellerId: string, newPin: string): boolean {
+  const resells = getResellers();
+  const updated = resells.map((r) => (r.id === resellerId ? { ...r, pin: newPin } : r));
+  saveResellers(updated);
+  return true;
+}
+
+export function updateOwnerPin(newPin: string): void {
+  const prof = getBusinessProfile();
+  prof.adminPin = newPin;
+  saveBusinessProfile(prof);
+}
+
+export function getOwnerPin(): string {
+  const prof = getBusinessProfile();
+  return prof.adminPin || '580987';
+}
+
 
 // Calculate Customer Balance and Total Purchases from Transactions
 export function recalculateCustomerBalances(
@@ -341,7 +421,9 @@ export function startFromScratchData(): void {
   }));
   saveToStorage(STORAGE_KEYS.RESELLERS, freshResellers);
   saveToStorage(STORAGE_KEYS.REVIEW_REWARDS, []);
-  saveToStorage(STORAGE_KEYS.ACTIVE_ROLE, 'admin');
+  saveToStorage(STORAGE_KEYS.ACTIVE_ROLE, 'customer');
+  saveToStorage(STORAGE_KEYS.CURRENT_USER, defaultCustomerUser);
+  saveToStorage(STORAGE_KEYS.LOGIN_AUDITS, defaultLoginAuditLogs);
 }
 
 // Export all data as JSON
@@ -364,6 +446,7 @@ export function exportAllDataJSON(): string {
     attendance: getAttendance(),
     resellers: getResellers(),
     reviewRewards: getReviewRewards(),
+    loginAudits: getLoginAudits(),
   };
   return JSON.stringify(data, null, 2);
 }
@@ -388,6 +471,7 @@ export function importAllDataJSON(jsonStr: string): boolean {
     if (parsed.attendance) saveAttendance(parsed.attendance);
     if (parsed.resellers) saveResellers(parsed.resellers);
     if (parsed.reviewRewards) saveReviewRewards(parsed.reviewRewards);
+    if (parsed.loginAudits) saveLoginAudits(parsed.loginAudits);
     return true;
   } catch (e) {
     console.error('Failed to import JSON data', e);

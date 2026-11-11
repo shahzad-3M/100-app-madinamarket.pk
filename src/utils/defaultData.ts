@@ -6,6 +6,7 @@ import {
   Customer,
   Employee,
   LuckyDrawEvent,
+  LoginAuditRecord,
   ProductBroadcast,
   ProductItem,
   RecurringInvoice,
@@ -65,6 +66,7 @@ export const defaultBusinessProfile: BusinessProfile = {
     enabled: true,
     autoSync: true,
   },
+  adminPin: '580987', // USER DIRECTIVE: Owner default pin is 580987 and resettable in backend
 };
 
 // USER DIRECTIVE: Single pristine demo item with full pictures, sizes, specs & details!
@@ -133,6 +135,7 @@ export const defaultCustomers: Customer[] = [
     ageGroup: '26-35',
     creditLimit: 5000, // USER DIRECTIVE: keep credit limit 5000 by default
     paymentTermsDays: 7, // USER DIRECTIVE: payment terms 7 days
+    pin: '234567', // USER DIRECTIVE: Default 6-digit pin is last 6 digits of mobile number 03001234567
     notes: 'Regular wholesale buyer in Madina Market.',
     createdAt: '2026-02-15',
     balance: 17450,
@@ -548,6 +551,7 @@ export const defaultResellers: Reseller[] = [
     accountTitle: 'Usman Ghani',
     accountNumber: '03125256266',
     creditLimit: 25000,
+    pin: '526266', // Default: last 6 digits of 03125256266
     totalReferredOrders: 5,
     totalSales: 34900,
     totalPaidSales: 20000,
@@ -567,6 +571,7 @@ export const defaultResellers: Reseller[] = [
     accountTitle: 'Syed Faizan Ali',
     accountNumber: '03214567890',
     creditLimit: 25000,
+    pin: '567890', // Default: last 6 digits of 03214567890
     totalReferredOrders: 3,
     totalSales: 17450,
     totalPaidSales: 17450,
@@ -595,4 +600,42 @@ export const defaultReviewRewards: ReviewRewardSubmission[] = [
     approvedAt: '2026-03-01T16:00:00Z',
   },
 ];
+
+// LOGIN AUDIT LOGS (Owner & Admin View)
+export const defaultLoginAuditLogs: LoginAuditRecord[] = [
+  {
+    id: 'log_1',
+    userName: 'Al-Haj Muhammad Asif',
+    phone: '03125256266',
+    role: 'admin',
+    timestamp: '2026-03-02T09:15:00Z',
+    status: 'success',
+    ipOrDevice: 'Main Office Terminal (Lahore)',
+    notes: 'Owner Master Login verified with PIN',
+    usedPin: '••••••',
+  },
+  {
+    id: 'log_2',
+    userName: 'Al-Madina Cosmetics & General Store',
+    phone: '03001234567',
+    role: 'customer',
+    timestamp: '2026-03-02T11:30:00Z',
+    status: 'success',
+    ipOrDevice: 'Mobile Web (Safari / iOS)',
+    notes: 'Customer Mobile OTP/PIN Login',
+    usedPin: '••••••',
+  },
+  {
+    id: 'log_3',
+    userName: 'Usman Ghani',
+    phone: '03125256266',
+    role: 'reseller',
+    timestamp: '2026-03-02T14:45:00Z',
+    status: 'success',
+    ipOrDevice: 'Android Chrome (Karachi)',
+    notes: 'Reseller Portal Login with PIN',
+    usedPin: '••••••',
+  },
+];
+
 

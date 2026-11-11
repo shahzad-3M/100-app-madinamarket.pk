@@ -17,7 +17,7 @@ import {
   AlertTriangle,
   Lock,
 } from 'lucide-react';
-import { BusinessProfile, CartItem, Customer, PaymentMode, SalePaymentType, Transaction } from '../types';
+import { AppUser, BusinessProfile, CartItem, Customer, PaymentMode, SalePaymentType, Transaction } from '../types';
 import { formatPaymentChannelsText, openWhatsAppDirect } from '../utils/whatsapp';
 
 interface CheckoutModalProps {
@@ -28,6 +28,7 @@ interface CheckoutModalProps {
   profile: BusinessProfile;
   isCustomerView?: boolean;
   isAdmin?: boolean;
+  currentUser?: AppUser;
   onCompleteSale: (
     saleData: {
       customerId: string;
@@ -52,11 +53,17 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
   profile,
   isCustomerView = false,
   isAdmin = true,
+  currentUser,
   onCompleteSale,
 }) => {
   if (!isOpen) return null;
 
-  const [selectedCustomerId, setSelectedCustomerId] = useState<string>(customers[0]?.id || '');
+  const [selectedCustomerId, setSelectedCustomerId] = useState<string>(() => {
+    if (currentUser?.customerId && customers.some((c) => c.id === currentUser.customerId)) {
+      return currentUser.customerId;
+    }
+    return customers[0]?.id || '';
+  });
   const [saleType, setSaleType] = useState<SalePaymentType>(isCustomerView ? 'cod' : 'full');
   const [partialPaidInput, setPartialPaidInput] = useState<string>('');
   const [paymentMode, setPaymentMode] = useState<PaymentMode>(isCustomerView ? 'cod' : 'easypaisa');
@@ -372,7 +379,7 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
               className="w-full px-3 py-1.5 rounded-lg border border-purple-300 dark:border-purple-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-mono uppercase text-xs"
             />
             <span className="text-[10px] text-purple-700 dark:text-purple-300 block">
-              Earns Rs. 30 per Rs. 1,000 for your referring wholesale partner upon paid delivery.
+              Enter partner or referral code if you were referred by a registered 100DAGAR associate.
             </span>
           </div>
 
