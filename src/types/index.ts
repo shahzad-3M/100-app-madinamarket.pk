@@ -49,6 +49,18 @@ export interface TransactionItem {
   customerSavings?: number;
 }
 
+export interface TransactionAuditEntry {
+  id: string;
+  timestamp: string; // ISO string e.g. 2026-11-11T12:00:00Z
+  action: 'created' | 'status_updated' | 'amount_edited' | 'payment_received' | 'correction' | 'cancelled';
+  previousStatus?: string;
+  newStatus?: string;
+  previousAmount?: number;
+  newAmount?: number;
+  changedBy: string; // User or Staff member responsible
+  notes?: string;
+}
+
 export interface Transaction {
   id: string;
   customerId: string;
@@ -68,6 +80,9 @@ export interface Transaction {
   paymentMode?: PaymentMode;
   items?: TransactionItem[];
   totalSavings?: number; // Total amount saved by customer compared to market price
+  status?: 'completed' | 'pending' | 'partially_paid' | 'overdue' | 'cancelled';
+  responsibleStaff?: string; // User/staff member responsible
+  auditTrail?: TransactionAuditEntry[];
   createdAt: string;
 }
 

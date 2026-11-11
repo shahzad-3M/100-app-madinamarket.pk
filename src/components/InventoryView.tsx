@@ -21,6 +21,7 @@ import {
   CheckCircle2,
 } from 'lucide-react';
 import { BusinessProfile, ProductItem } from '../types';
+import { getCategories, addCategory } from '../utils/storage';
 
 interface InventoryViewProps {
   products: ProductItem[];
@@ -73,6 +74,12 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
   const [importNewCategoryName, setImportNewCategoryName] = useState<string>('');
   const [importParentCategory, setImportParentCategory] = useState<string>('');
 
+  // Central category management (User directive: categories centrally managed & reusable across all products)
+  const [centralCategories, setCentralCategories] = useState<string[]>(() => getCategories());
+  const [isCreatingNewCategory, setIsCreatingNewCategory] = useState(false);
+  const [newCategoryInput, setNewCategoryInput] = useState('');
+  const [categoryError, setCategoryError] = useState('');
+
   // Synchronize external import trigger if provided
   React.useEffect(() => {
     if (isExternalImportOpen) {
@@ -80,7 +87,22 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
     }
   }, [isExternalImportOpen]);
 
-  const categories = Array.from(new Set(products.map((p) => p.category)));
+  // Keep central categories updated with existing product categories
+  const categories = centralCategories;
+
+  const handleCreateCategoryDirect = () => {
+    const trimmed = newCategoryInput.trim();
+    if (!trimmed) {
+      setCategoryError('Please enter a category name.');
+      return;
+    }
+    const result = addCategory(trimmed);
+    setCentralCategories(result.categories);
+    setFormCategory(trimmed);
+    setNewCategoryInput('');
+    setIsCreatingNewCategory(false);
+    setCategoryError('');
+  };
 
   // Calculate high-level KPIs
   const totalStockCount = products.reduce((acc, p) => acc + p.stockQty, 0);
@@ -122,7 +144,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
       setEditingProduct(null);
       setFormName('');
       setFormUrduName('');
-      setFormCategory('Cosmetics');
+      setFormCategory(centralCategories[0] || 'Cosmetics');
       setFormSku(`SKU-${Math.floor(1000 + Math.random() * 9000)}`);
       setFormCostPrice('');
       setFormMarketPrice('');
@@ -133,6 +155,9 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
       setFormImageUrl('');
       setFormWebsiteUrl('');
     }
+    setIsCreatingNewCategory(false);
+    setNewCategoryInput('');
+    setCategoryError('');
     setIsAddModalOpen(true);
   };
 
@@ -144,11 +169,16 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
     const stock = parseInt(formStockQty, 10) || 0;
     const minStock = parseInt(formMinStock, 10) || 10;
 
+    const assignedCategory = formCategory.trim() || 'General';
+    // Persist category centrally so it is available for all products
+    const catResult = addCategory(assignedCategory);
+    setCentralCategories(catResult.categories);
+
     const prodToSave: ProductItem = {
       id: editingProduct ? editingProduct.id : `prod_${Date.now()}`,
       name: formName.trim(),
       urduName: formUrduName.trim() || undefined,
-      category: formCategory.trim() || 'General',
+      category: assignedCategory,
       sku: formSku.trim() || `SKU-${Date.now()}`,
       costPrice: cost,
       marketPrice: market,
@@ -400,6 +430,9 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
       ...parsedProductPreview,
       category: categoryWithParent,
     };
+
+    const catResult = addCategory(categoryWithParent);
+    setCentralCategories(catResult.categories);
 
     onSaveProduct(productToSave);
     setImportSuccessAlert(true);
@@ -742,19 +775,84 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div className="space-y-1">
-                  <label className="font-bold text-slate-800 dark:text-slate-200 block">
-                    Category (کیٹیگری)
-                  </label>
-                  <input
-                    type="text"
-                    value={formCategory}
-                    onChange={(e) => setFormCategory(e.target.value)}
-                    placeholder="Cosmetics, Electronics..."
-                    className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-hidden"
-                    required
-                  />
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <label className="font-bold text-slate-800 dark:text-slate-200 block text-xs">
+                      Category (مرکزی کیٹیگری) *
+                    </label>
+                    {!isCreatingNewCategory && (
+                      <button
+                        type="button"
+                        onClick={() => setIsCreatingNewCategory(true)}
+                        className="text-[11px] font-bold text-amber-600 dark:text-amber-400 hover:underline cursor-pointer"
+                      >
+                        + New Category
+                      </button>
+                    )}
+                  </div>
+
+                  {!isCreatingNewCategory ? (
+                    <select
+                      value={formCategory}
+                      onChange={(e) => {
+                        if (e.target.value === '__NEW__') {
+                          setIsCreatingNewCategory(true);
+                        } else {
+                          setFormCategory(e.target.value);
+                        }
+                      }}
+                      className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-xs font-semibold focus:ring-2 focus:ring-amber-400 focus:outline-hidden cursor-pointer"
+                      required
+                    >
+                      <option value="">Select Existing Category...</option>
+                      {centralCategories.map((c) => (
+                        <option key={c} value={c}>
+                          {c}
+                        </option>
+                      ))}
+                      <option value="__NEW__">+ Create New Category (نئی کیٹیگری بنائیں)...</option>
+                    </select>
+                  ) : (
+                    <div className="space-y-1.5 p-2 bg-amber-50 dark:bg-amber-950/40 rounded-lg border border-amber-200 dark:border-amber-800">
+                      <span className="text-[10px] font-bold text-amber-900 dark:text-amber-200 block">
+                        New Category (مرکزی ڈیٹا بیس میں محفوظ ہوگی):
+                      </span>
+                      <div className="flex gap-1.5">
+                        <input
+                          type="text"
+                          value={newCategoryInput}
+                          onChange={(e) => {
+                            setNewCategoryInput(e.target.value);
+                            setCategoryError('');
+                          }}
+                          placeholder="e.g. Health & Beauty"
+                          className="flex-1 px-2.5 py-1 text-xs rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-hidden"
+                          autoFocus
+                        />
+                        <button
+                          type="button"
+                          onClick={handleCreateCategoryDirect}
+                          className="px-2.5 py-1 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs rounded-lg cursor-pointer"
+                        >
+                          Save
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setIsCreatingNewCategory(false);
+                            setCategoryError('');
+                          }}
+                          className="px-2 py-1 text-xs text-slate-500 hover:text-slate-800 cursor-pointer"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                      {categoryError && (
+                        <p className="text-[10px] text-red-500 font-medium">{categoryError}</p>
+                      )}
+                    </div>
+                  )}
                 </div>
                 <div className="space-y-1">
                   <label className="font-bold text-slate-800 dark:text-slate-200 block">

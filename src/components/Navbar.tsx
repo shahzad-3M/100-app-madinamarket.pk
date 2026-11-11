@@ -20,6 +20,7 @@ import {
   X,
   ChevronDown,
   Phone,
+  Clock,
 } from 'lucide-react';
 import { AppUser, BusinessProfile, UserRole } from '../types';
 import { openWhatsAppDirect } from '../utils/whatsapp';
@@ -92,9 +93,11 @@ export const Navbar: React.FC<NavbarProps> = ({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // USER DIRECTIVE: lucky draw and statement change place and dropdown best place not in quick front
+  // USER DIRECTIVE: Customer Reports & History visibility
   const customerNavItems: NavItem[] = [
     { id: 'store', label: 'Shop & Catalog', urdu: 'مارکیٹ کیٹلاگ', icon: ShoppingBag },
+    { id: 'history', label: 'Transaction History', urdu: 'کھاتہ و تاریخ وار ہسٹری', icon: Clock },
+    { id: 'reports', label: 'My Reports & Savings', urdu: 'میرا خلاصہ و بچت رپورٹ', icon: BarChart3 },
   ];
   const customerDropdownItems: NavItem[] = [
     { id: 'monthly_statement', label: 'My Monthly Statement', urdu: 'ماہانہ کسٹمر کھاتہ', icon: FileText },
@@ -106,6 +109,7 @@ export const Navbar: React.FC<NavbarProps> = ({
     { id: 'resellers', label: 'Reseller Portal & Earnings', urdu: 'ری سیلر پورٹل', icon: Briefcase },
   ];
   const resellerDropdownItems: NavItem[] = [
+    { id: 'history', label: 'Transaction History', urdu: 'کھاتہ ہسٹری', icon: Clock },
     { id: 'monthly_statement', label: 'Statement', urdu: 'ماہانہ کھاتہ', icon: FileText },
     { id: 'lucky_draw', label: 'Lucky Draw', urdu: 'لکی ڈرا', icon: Trophy },
   ];
@@ -120,6 +124,7 @@ export const Navbar: React.FC<NavbarProps> = ({
     { id: 'reports', label: 'Daybook & Reports', urdu: 'روزنامچہ و آڈٹ', icon: BarChart3 },
   ];
   const merchantDropdownItems: NavItem[] = [
+    { id: 'history', label: 'Transaction History & Audit', urdu: 'مکمل تاریخ وار کھاتہ', icon: Clock },
     { id: 'monthly_statement', label: 'Monthly Statements', urdu: 'ماہانہ اسٹیٹمنٹ', icon: FileText },
     { id: 'lucky_draw', label: 'Lucky Draw & Winners', urdu: 'لکی ڈرا لائیو', icon: Trophy },
     { id: 'dashboard', label: 'Ledger Overview', urdu: 'کھاتہ خلاصہ', icon: FileText },
@@ -154,7 +159,7 @@ export const Navbar: React.FC<NavbarProps> = ({
       <div className="w-full">
         <div className="max-w-7xl mx-auto px-3 sm:px-4 md:px-6 lg:px-8 py-2 sm:py-2.5">
           <div className="flex items-center justify-between gap-1.5 sm:gap-4">
-            {/* Logo & Urdu Subtext */}
+            {/* Logo & Tagline (WE BUY WE SELL, Urdu removed) */}
             <div
               onClick={() => onTabChange('store')}
               className="cursor-pointer shrink-0 flex items-center gap-1.5 sm:gap-2 group select-none"
@@ -167,12 +172,9 @@ export const Navbar: React.FC<NavbarProps> = ({
                   <span className="text-base sm:text-xl font-extrabold tracking-tight text-slate-900 dark:text-white leading-none">
                     100DAGAR
                   </span>
-                  <span className="text-[11px] sm:text-xs font-bold text-amber-600 dark:text-amber-400 font-urdu leading-none">
-                    مدینہ مارکیٹ
-                  </span>
                 </div>
-                <span className="text-[9px] sm:text-[10px] text-slate-500 dark:text-slate-400 block tracking-wider uppercase leading-tight mt-0.5">
-                  Wholesale &amp; Retail Store
+                <span className="text-[9px] sm:text-[10px] font-bold text-amber-600 dark:text-amber-400 block tracking-wider uppercase leading-tight mt-0.5">
+                  WE BUY WE SELL
                 </span>
               </div>
             </div>
@@ -265,7 +267,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               <button
                 type="button"
                 onClick={() => onOpenRoleModal?.()}
-                className={`px-2 sm:px-3 py-1 sm:py-1.5 text-xs font-bold rounded-lg border flex items-center gap-1 sm:gap-1.5 transition-all cursor-pointer shadow-2xs shrink-0 ${
+                className={`px-1.5 xs:px-2 sm:px-3 py-1 sm:py-1.5 text-xs font-bold rounded-lg border flex items-center gap-1 sm:gap-1.5 transition-all cursor-pointer shadow-2xs shrink-0 ${
                   userRole === 'admin'
                     ? 'border-amber-400 bg-amber-50 dark:bg-amber-950/60 text-amber-900 dark:text-amber-200'
                     : userRole === 'reseller'
@@ -286,11 +288,11 @@ export const Navbar: React.FC<NavbarProps> = ({
                 </span>
               </button>
 
-              {/* Quick Cart Button */}
+              {/* Quick Cart Button (Moved slightly left on mobile) */}
               <button
                 type="button"
                 onClick={() => onOpenCart?.()}
-                className="flex items-center gap-1 sm:gap-1.5 px-2 sm:px-2.5 py-1 sm:py-1.5 bg-amber-50 dark:bg-amber-950/40 hover:bg-amber-100 dark:hover:bg-amber-900/60 border border-amber-200 dark:border-amber-800 rounded-lg text-slate-900 dark:text-slate-100 cursor-pointer transition-colors shadow-2xs shrink-0"
+                className="flex items-center gap-1 sm:gap-1.5 px-1.5 sm:px-2.5 py-1 sm:py-1.5 -ml-1 sm:ml-0 bg-amber-50 dark:bg-amber-950/40 hover:bg-amber-100 dark:hover:bg-amber-900/60 border border-amber-200 dark:border-amber-800 rounded-lg text-slate-900 dark:text-slate-100 cursor-pointer transition-colors shadow-2xs shrink-0"
                 title="Shopping Cart / آرڈر"
               >
                 <div className="relative">
@@ -306,12 +308,12 @@ export const Navbar: React.FC<NavbarProps> = ({
                 </span>
               </button>
 
-              {/* Theme Toggle */}
+              {/* Theme Toggle (Moved slightly left on mobile) */}
               <button
                 type="button"
                 onClick={() => onToggleDarkMode()}
                 aria-label="Toggle theme"
-                className="p-1 sm:p-1.5 text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-100 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer shrink-0"
+                className="p-1 sm:p-1.5 -ml-0.5 sm:ml-0 mr-0.5 sm:mr-0 text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-100 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer shrink-0"
               >
                 {darkMode ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
               </button>

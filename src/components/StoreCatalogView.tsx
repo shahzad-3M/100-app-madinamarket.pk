@@ -69,6 +69,7 @@ export const StoreCatalogView: React.FC<StoreCatalogViewProps> = ({
   const [customerTypeFilter, setCustomerTypeFilter] = useState<'all' | 'individual' | 'retail'>('all');
   const [showWinningOnly, setShowWinningOnly] = useState(false);
   const [selectedDetailProduct, setSelectedDetailProduct] = useState<ProductItem | null>(null);
+  const [isMobileFilterOpen, setIsMobileFilterOpen] = useState(false);
 
   // DYNAMIC CATEGORIES: Strictly only categories present or imported from website (User directive)
   const dynamicCategories = useMemo(() => {
@@ -89,14 +90,15 @@ export const StoreCatalogView: React.FC<StoreCatalogViewProps> = ({
   const totalCartAmount = cart.reduce((acc, it) => acc + it.unitPrice * it.quantity, 0);
   const totalCartSavings = totalCartMarket - totalCartAmount;
 
-  // Filter & sort logic
+  // Filter & sort logic (ensuring full parity between mobile and desktop)
   const filteredProducts = useMemo(() => {
     return products
       .filter((p) => {
-        // Category filter
+        // Category filter (support robust matching)
         if (selectedCategory && selectedCategory !== 'All Categories' && selectedCategory !== 'For you') {
-          const matchCat = p.category.toLowerCase().includes(selectedCategory.toLowerCase()) ||
-            selectedCategory.toLowerCase().includes(p.category.toLowerCase());
+          const sel = selectedCategory.trim().toLowerCase();
+          const pCat = (p.category || '').trim().toLowerCase();
+          const matchCat = pCat === sel || pCat.includes(sel) || sel.includes(pCat);
           if (!matchCat) return false;
         }
 
@@ -107,11 +109,11 @@ export const StoreCatalogView: React.FC<StoreCatalogViewProps> = ({
 
         // Search filter
         if (searchQuery.trim()) {
-          const q = searchQuery.toLowerCase();
+          const q = searchQuery.toLowerCase().trim();
           const matchName = p.name.toLowerCase().includes(q);
           const matchUrdu = p.urduName ? p.urduName.toLowerCase().includes(q) : false;
           const matchSku = p.sku.toLowerCase().includes(q);
-          const matchCat = p.category.toLowerCase().includes(q);
+          const matchCat = p.category ? p.category.toLowerCase().includes(q) : false;
           if (!matchName && !matchUrdu && !matchSku && !matchCat) return false;
         }
 
@@ -154,10 +156,27 @@ export const StoreCatalogView: React.FC<StoreCatalogViewProps> = ({
         </div>
       </div>
 
+      {/* Mobile Categories & Filters Drawer Trigger */}
+      <div className="lg:hidden flex items-center justify-between gap-2 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-2.5 shadow-2xs">
+        <button
+          type="button"
+          onClick={() => setIsMobileFilterOpen(!isMobileFilterOpen)}
+          className="flex-1 flex items-center justify-between text-xs font-bold text-slate-800 dark:text-slate-100 cursor-pointer"
+        >
+          <div className="flex items-center gap-2">
+            <Filter className="w-4 h-4 text-amber-500" />
+            <span>Categories &amp; Filter Options ({filteredProducts.length} items)</span>
+          </div>
+          <span className="text-[11px] text-amber-600 dark:text-amber-400 font-semibold">
+            {isMobileFilterOpen ? 'Hide Filters ▲' : 'Browse Categories ▼'}
+          </span>
+        </button>
+      </div>
+
       {/* 2. MAIN LAYOUT: LEFT SIDEBAR + PRODUCT GRID */}
-      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6 items-start">
-        {/* LEFT SIDEBAR: CATEGORIES TREE (Matching Screenshot) */}
-        <aside className="lg:col-span-1 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-4 shadow-2xs space-y-4">
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-4 sm:gap-6 items-start">
+        {/* LEFT SIDEBAR: CATEGORIES TREE */}
+        <aside className={`${isMobileFilterOpen ? 'block' : 'hidden'} lg:block lg:col-span-1 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800 p-4 shadow-2xs space-y-4`}>
           <div className="flex items-center justify-between pb-3 border-b border-slate-100 dark:border-slate-800">
             <h2 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
               <span>Show All Categories</span>

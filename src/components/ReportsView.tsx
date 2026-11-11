@@ -17,6 +17,10 @@ import {
   DollarSign,
   Clock,
   Sparkles,
+  ShoppingBag,
+  Eye,
+  User,
+  ShieldCheck,
 } from 'lucide-react';
 import { BusinessProfile, CODOrder, Customer, ProductItem, Transaction } from '../types';
 import { calculateDaysOverdue, openWhatsAppDirect, formatPaymentChannelsText } from '../utils/whatsapp';
@@ -29,6 +33,8 @@ interface ReportsViewProps {
   codOrders?: CODOrder[];
   products?: ProductItem[];
   onOpenInvoiceModal: (tx: Transaction, customer: Customer) => void;
+  userRole?: string;
+  currentUser?: { customerId?: string; role?: string; name?: string; phone?: string };
 }
 
 export const ReportsView: React.FC<ReportsViewProps> = ({
@@ -38,6 +44,8 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
   codOrders = [],
   products = [],
   onOpenInvoiceModal,
+  userRole = 'admin',
+  currentUser,
 }) => {
   const [dateRange, setDateRange] = useState<'all' | 'this_month' | 'last_month' | 'this_week'>('this_month');
   const [reportType, setReportType] = useState<'daily_closing' | 'summary' | 'daybook' | 'aging'>('daily_closing');
@@ -235,10 +243,205 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
 
   const handleSendDailyClosingWhatsApp = () => {
     const cleanPhone = (profile.phone || '03125256266').replace(/\D/g, '');
-    const msg = `📊 *ڈیلی کلوزنگ و روزنامچہ آڈٹ رپورٹ / Daily Closing Report*\n*${profile.name} · مدینہ مارکیٹ لاہور*\n*تاریخ (Date):* ${selectedDailyDate}\n\n*1. کل موصولہ نقد رقم (Amount Collected Today):* *${profile.currencySymbol}${totalAmountCollectedToday.toLocaleString('en-PK')}*\n• Cash Counter (دکان نقد): ${profile.currencySymbol}${cashChannelSum.toLocaleString('en-PK')}\n• COD (WASAL Delivery موصول): ${profile.currencySymbol}${codChannelSum.toLocaleString('en-PK')}\n• EasyPaisa (03125256266): ${profile.currencySymbol}${easyPaisaChannelSum.toLocaleString('en-PK')}\n• JazzCash: ${profile.currencySymbol}${jazzCashChannelSum.toLocaleString('en-PK')}\n• SadaPay: ${profile.currencySymbol}${sadaPayChannelSum.toLocaleString('en-PK')}\n• Bank Transfer: ${profile.currencySymbol}${bankChannelSum.toLocaleString('en-PK')}\n\n*2. آج کے آرڈرز (Orders Placed):* ${totalOrdersPlacedCount} پارسلز (${profile.currencySymbol}${totalOrdersPlacedAmount.toLocaleString('en-PK')})\n\n*3. ڈلیور شدہ و کیش وصول (Delivered Today):* ${totalDeliveredCount} پارسلز (${profile.currencySymbol}${totalDeliveredCash.toLocaleString('en-PK')})\n\n*4. روانگی کے لیے تیار پارسلز (Ready to Deliver):* ${totalReadyToDeliverCount} پارسلز (${profile.currencySymbol}${totalReadyToDeliverValue.toLocaleString('en-PK')} بذریعہ WASAL delivery)\n\n*5. پارسل واپسی (Returns Today):* ${totalReturnsCount} پارسلز (${profile.currencySymbol}${totalReturnsValue.toLocaleString('en-PK')})\n\n*6. کم اسٹاک الرٹ (Low Stock Items):* ${lowStockAlertItems.length} آئٹمز ری آرڈر کے قریب ہیں۔\n\n*Shipping Partner:* ${profile.shippingPartner?.name || 'WASAL delivery'} (Shipday Synced)`;
-
+    const msg = `📊 *ڈیلی کلوزنگ و روزنامچہ رپورٹ / Daily Closing Report*\n*${profile.name}*\n*تاریخ:* ${selectedDailyDate}\n\n*1. کل موصولہ رقم:* ${profile.currencySymbol}${totalAmountCollectedToday.toLocaleString('en-PK')}\n• دکان نقد: ${profile.currencySymbol}${cashChannelSum.toLocaleString('en-PK')}\n• آن لائن چینلز: ${profile.currencySymbol}${(easyPaisaChannelSum + jazzCashChannelSum + sadaPayChannelSum + bankChannelSum).toLocaleString('en-PK')}\n\n*2. آج کے آرڈرز:* ${totalOrdersPlacedCount} (${profile.currencySymbol}${totalOrdersPlacedAmount.toLocaleString('en-PK')})\n*3. ڈلیور شدہ پارسلز:* ${totalDeliveredCount} (${profile.currencySymbol}${totalDeliveredCash.toLocaleString('en-PK')})\n*4. کم اسٹاک الرٹ:* ${lowStockAlertItems.length} آئٹمز`;
     openWhatsAppDirect(cleanPhone, msg);
   };
+
+  // DEDICATED CUSTOMER REPORTS & SAVINGS PORTAL (USER DIRECTIVE: customer-scoped reports visibility)
+  if (userRole === 'customer') {
+    let matchedCustomer = customers[0];
+    if (currentUser?.customerId) {
+      const found = customers.find((c) => c.id === currentUser.customerId);
+      if (found) matchedCustomer = found;
+    } else if (currentUser?.phone) {
+      const clean = currentUser.phone.replace(/\D/g, '');
+      const found = customers.find((c) => c.phone.replace(/\D/g, '') === clean);
+      if (found) matchedCustomer = found;
+    }
+
+    const custTxs = transactions.filter((t) => t.customerId === matchedCustomer?.id);
+    const custTotalPurchases = custTxs.filter((t) => t.type === 'credit').reduce((s, t) => s + t.amount, 0);
+    const custTotalPaid = custTxs.reduce((s, t) => s + (t.paidAmount || (t.type === 'debit' ? t.amount : 0)), 0);
+    const custBalance = Math.max(0, custTotalPurchases - custTotalPaid);
+    const custTotalSavings = custTxs.reduce((s, t) => s + (t.totalSavings || 0), 0);
+    const custOrdersCount = custTxs.filter((t) => t.type === 'credit').length;
+
+    return (
+      <div className="space-y-6">
+        {/* Customer Header Banner */}
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-4 sm:p-6 shadow-xs flex flex-wrap items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-amber-500 text-slate-950 flex items-center justify-center font-black shadow-2xs">
+              <PieChart className="w-5 h-5" />
+            </div>
+            <div>
+              <div className="flex items-center gap-2">
+                <h1 className="text-lg sm:text-xl font-extrabold text-slate-900 dark:text-white">
+                  My Purchases &amp; Savings Report
+                </h1>
+                <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-amber-100 dark:bg-amber-950 text-amber-800 dark:text-amber-300">
+                  {matchedCustomer ? matchedCustomer.name : 'Customer Portal'}
+                </span>
+              </div>
+              <p className="text-xs text-slate-500 dark:text-slate-400">
+                خلاصہ و بچت رپورٹ - Your complete personal spending overview, instant savings, and invoice history.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => window.print()}
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 hover:bg-slate-50 cursor-pointer shadow-2xs"
+            >
+              <Printer className="w-3.5 h-3.5 text-slate-500" />
+              <span>Print Report</span>
+            </button>
+          </div>
+        </div>
+
+        {/* 4 Customer KPI Cards */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+          <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-2xs">
+            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">
+              Total Orders
+            </span>
+            <p className="text-xl sm:text-2xl font-black font-mono text-slate-900 dark:text-white mt-1">
+              {custOrdersCount} Orders
+            </p>
+            <span className="text-[10px] text-slate-400 block mt-0.5">
+              Purchases to date
+            </span>
+          </div>
+
+          <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-2xs">
+            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider block">
+              Total Purchases
+            </span>
+            <p className="text-xl sm:text-2xl font-black font-mono text-slate-900 dark:text-white mt-1">
+              {profile.currencySymbol}{custTotalPurchases.toLocaleString('en-PK')}
+            </p>
+            <span className="text-[10px] text-slate-400 block mt-0.5">
+              Wholesale lot spend
+            </span>
+          </div>
+
+          <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-2xs">
+            <span className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider block">
+              Total Wholesale Savings (بچت)
+            </span>
+            <p className="text-xl sm:text-2xl font-black font-mono text-emerald-600 dark:text-emerald-400 mt-1">
+              {profile.currencySymbol}{custTotalSavings.toLocaleString('en-PK')}
+            </p>
+            <span className="text-[10px] text-slate-400 block mt-0.5">
+              Saved compared to retail prices
+            </span>
+          </div>
+
+          <div className="bg-white dark:bg-slate-900 p-4 rounded-xl border border-slate-200 dark:border-slate-800 shadow-2xs">
+            <span className="text-[11px] font-bold text-amber-600 dark:text-amber-400 uppercase tracking-wider block">
+              Outstanding Balance
+            </span>
+            <p className="text-xl sm:text-2xl font-black font-mono text-amber-600 dark:text-amber-400 mt-1">
+              {custBalance === 0 ? 'Clear (صاف)' : `${profile.currencySymbol}${custBalance.toLocaleString('en-PK')}`}
+            </p>
+            <span className="text-[10px] text-slate-400 block mt-0.5">
+              Total Paid: {profile.currencySymbol}{custTotalPaid.toLocaleString('en-PK')}
+            </span>
+          </div>
+        </div>
+
+        {/* Invoices & Purchase History for Customer */}
+        <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl overflow-hidden shadow-2xs">
+          <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+            <h2 className="text-sm font-bold text-slate-900 dark:text-white flex items-center gap-2">
+              <FileText className="w-4 h-4 text-amber-500" />
+              <span>My Invoices &amp; Transaction Statements</span>
+            </h2>
+            <span className="text-xs text-slate-400 font-mono">
+              {custTxs.length} Record(s)
+            </span>
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-xs text-left">
+              <thead>
+                <tr className="bg-slate-50 dark:bg-slate-850 border-b border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 font-bold uppercase">
+                  <th className="py-2.5 px-3">Date</th>
+                  <th className="py-2.5 px-3">Invoice #</th>
+                  <th className="py-2.5 px-3">Items / Description</th>
+                  <th className="py-2.5 px-3 text-right">Amount</th>
+                  <th className="py-2.5 px-3 text-right">Your Savings</th>
+                  <th className="py-2.5 px-3 text-center">Payment Mode</th>
+                  <th className="py-2.5 px-3 text-center">Status</th>
+                  <th className="py-2.5 px-3 text-right">Invoice</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                {custTxs.map((tx) => {
+                  const isPaid = tx.paidAmount && tx.paidAmount >= tx.amount;
+                  return (
+                    <tr key={tx.id} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40">
+                      <td className="py-2.5 px-3 font-mono">{tx.date}</td>
+                      <td className="py-2.5 px-3 font-mono font-bold text-amber-600">
+                        {tx.invoiceNumber || `INV-${tx.id.slice(-6).toUpperCase()}`}
+                      </td>
+                      <td className="py-2.5 px-3">
+                        {tx.items && tx.items.length > 0 ? (
+                          <span>{tx.items.map((i) => `${i.description} (×${i.quantity})`).join(', ')}</span>
+                        ) : (
+                          <span>{tx.notes || (tx.type === 'credit' ? 'Product Order' : 'Payment Received')}</span>
+                        )}
+                      </td>
+                      <td className="py-2.5 px-3 text-right font-mono font-bold">
+                        {profile.currencySymbol}{tx.amount.toLocaleString('en-PK')}
+                      </td>
+                      <td className="py-2.5 px-3 text-right font-mono text-emerald-600 font-semibold">
+                        {tx.totalSavings ? `${profile.currencySymbol}${tx.totalSavings.toLocaleString('en-PK')}` : '-'}
+                      </td>
+                      <td className="py-2.5 px-3 text-center uppercase font-mono text-[10px]">
+                        {tx.paymentMode || 'cash'}
+                      </td>
+                      <td className="py-2.5 px-3 text-center">
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                          isPaid
+                            ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
+                            : 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'
+                        }`}>
+                          {isPaid ? 'PAID' : 'PENDING'}
+                        </span>
+                      </td>
+                      <td className="py-2.5 px-3 text-right">
+                        {matchedCustomer && (
+                          <button
+                            type="button"
+                            onClick={() => onOpenInvoiceModal(tx, matchedCustomer)}
+                            className="inline-flex items-center gap-1 px-2 py-1 rounded bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 text-slate-800 dark:text-slate-100 font-bold text-[11px] cursor-pointer"
+                          >
+                            <Eye className="w-3 h-3 text-amber-500" />
+                            <span>View</span>
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+
+          {custTxs.length === 0 && (
+            <div className="p-8 text-center text-slate-400">
+              <ShoppingBag className="w-8 h-8 mx-auto text-slate-300 dark:text-slate-600 mb-2" />
+              <p className="text-xs font-bold text-slate-700 dark:text-slate-300">
+                No orders recorded in your history yet.
+              </p>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">

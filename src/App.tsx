@@ -24,6 +24,7 @@ import {
   SavedBroadcastCampaign,
   TopBuyer,
   Transaction,
+  TransactionAuditEntry,
   UserRole,
   WhatsAppNotification,
 } from './types';
@@ -65,6 +66,9 @@ import {
   saveSavedBroadcasts,
   saveTransactions,
   saveWhatsAppNotifications,
+  getCategories,
+  saveCategories,
+  addCategory,
 } from './utils/storage';
 import {
   buildCustomerPaymentReminderMessage,
@@ -96,6 +100,7 @@ import { CustomersView } from './components/CustomersView';
 import { RecurringInvoicesView } from './components/RecurringInvoicesView';
 import { WhatsAppAutomationView } from './components/WhatsAppAutomationView';
 import { ReportsView } from './components/ReportsView';
+import { TransactionHistoryView } from './components/TransactionHistoryView';
 import { SettingsView } from './components/SettingsView';
 import { CheckoutModal } from './components/CheckoutModal';
 import { AddTransactionModal } from './components/AddTransactionModal';
@@ -203,9 +208,11 @@ export default function App() {
     return computeTopBuyers(customers, transactions);
   }, [customers, transactions]);
 
-  // Distinct Categories
+  // Centralized Distinct Categories
   const allCategories = useMemo(() => {
-    return Array.from(new Set(products.map((p) => p.category)));
+    const central = getCategories();
+    const fromProds = products.map((p) => p.category?.trim()).filter(Boolean);
+    return Array.from(new Set([...central, ...fromProds])).sort((a, b) => a.localeCompare(b));
   }, [products]);
 
   // Pending alerts badge count
@@ -377,7 +384,18 @@ export default function App() {
       customerSavings: it.totalSavings,
     }));
 
-    // 1. Create Transaction
+    const initialStatus =
+      saleData.saleType === 'cod'
+        ? 'pending'
+        : saleData.dueBalance === 0
+        ? 'completed'
+        : (saleData.paidAmount > 0)
+        ? 'partially_paid'
+        : 'pending';
+
+    const staffName = activeRole === 'admin' ? 'Super Admin' : currentUser.name || 'Store Staff';
+
+    // 1. Create Transaction with Permanent Audit Trail
     const newTx: Transaction = {
       id: `tx_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
       customerId: saleData.customerId,
@@ -396,6 +414,19 @@ export default function App() {
       paymentMode: saleData.paymentMode,
       items: txItems,
       totalSavings,
+      status: initialStatus,
+      responsibleStaff: staffName,
+      auditTrail: [
+        {
+          id: `audit_chk_${Date.now()}`,
+          timestamp: new Date().toISOString(),
+          action: 'created',
+          newStatus: initialStatus,
+          newAmount: totalAmount,
+          changedBy: staffName,
+          notes: `Order created via checkout (${saleData.saleType.toUpperCase()}) with ${txItems.length} items`,
+        },
+      ],
       createdAt: new Date().toISOString(),
     };
 
@@ -838,27 +869,56 @@ export default function App() {
     const settledNum = parseFloat(amountToSettle) || 0;
     if (settledNum <= 0) return;
 
-    // 1. Create debit recovery transaction
+    // 1. Create debit recovery transaction with audit trail
     const debitTx: Transaction = {
       id: `tx_recov_${Date.now()}`,
       customerId: customer.id,
       type: 'debit',
       amount: settledNum,
       date: todayStr,
-      notes: `Recovery against Invoice #${tx.invoiceNumber || 'INV'}`,
+      notes: `Payment receipt against Invoice #${tx.invoiceNumber || 'INV'}`,
       paymentMode: 'easypaisa',
+      status: 'completed',
+      responsibleStaff: activeRole === 'admin' ? 'Super Admin' : currentUser.name || 'Store Staff',
+      auditTrail: [
+        {
+          id: `audit_deb_${Date.now()}`,
+          timestamp: new Date().toISOString(),
+          action: 'created',
+          newStatus: 'completed',
+          newAmount: settledNum,
+          changedBy: activeRole === 'admin' ? 'Super Admin' : currentUser.name || 'Store Staff',
+          notes: `Payment receipt recorded against invoice #${tx.invoiceNumber || 'INV'}`,
+        },
+      ],
       createdAt: new Date().toISOString(),
     };
 
-    // 2. Update original credit transaction due balance
-    const updatedTxs = transactions.map((t) => {
+    // 2. Update original credit transaction due balance and append audit entry without overwriting
+    const updatedTxs: Transaction[] = transactions.map((t) => {
       if (t.id === tx.id) {
         const curDue = t.dueBalance !== undefined ? t.dueBalance : t.amount;
         const curPaid = t.paidAmount || 0;
+        const newDue = Math.max(0, curDue - settledNum);
+        const newStatus: 'completed' | 'partially_paid' = newDue === 0 ? 'completed' : 'partially_paid';
+        const prevAudit = t.auditTrail || [];
+        const auditLog: TransactionAuditEntry = {
+          id: `audit_pay_${Date.now()}`,
+          timestamp: new Date().toISOString(),
+          action: 'payment_received',
+          previousStatus: t.status || 'pending',
+          newStatus,
+          previousAmount: curDue,
+          newAmount: newDue,
+          changedBy: activeRole === 'admin' ? 'Super Admin' : currentUser.name || 'Store Staff',
+          notes: `Payment of Rs. ${settledNum.toLocaleString('en-PK')} recorded. Balance now: Rs. ${newDue.toLocaleString('en-PK')}`,
+        };
         return {
           ...t,
-          dueBalance: Math.max(0, curDue - settledNum),
+          dueBalance: newDue,
           paidAmount: curPaid + settledNum,
+          status: newStatus,
+          auditTrail: [auditLog, ...prevAudit],
         };
       }
       return t;
@@ -897,13 +957,67 @@ export default function App() {
     saveWhatsAppNotifications(updated);
   };
 
+  // COMPLETE TRANSACTION AUDIT UPDATER (USER DIRECTIVE: maintain permanent audit trail of status changes & edits)
+  const handleUpdateTransactionStatus = (
+    txId: string,
+    newStatus: 'completed' | 'pending' | 'partially_paid' | 'overdue' | 'cancelled',
+    notes?: string,
+    staff?: string
+  ) => {
+    const updated: Transaction[] = transactions.map((t) => {
+      if (t.id === txId) {
+        const auditLog: TransactionAuditEntry = {
+          id: `audit_stat_${Date.now()}`,
+          timestamp: new Date().toISOString(),
+          action: 'status_updated' as const,
+          previousStatus: t.status || 'pending',
+          newStatus,
+          changedBy: staff || (activeRole === 'admin' ? 'Super Admin' : currentUser.name || 'Store Staff'),
+          notes: notes || 'Status updated from date-wise ledger',
+        };
+        const prevAudit = t.auditTrail || [];
+        return {
+          ...t,
+          status: newStatus,
+          responsibleStaff: staff || t.responsibleStaff || 'Super Admin',
+          auditTrail: [auditLog, ...prevAudit],
+        };
+      }
+      return t;
+    });
+    setTransactions(updated);
+    saveTransactions(updated);
+  };
+
   // STANDARD TRANSACTION HANDLER
   const handleSaveTransaction = (
     txData: Omit<Transaction, 'id' | 'createdAt'>,
     sendWhatsApp: boolean
   ) => {
+    const initialStatus: 'completed' | 'pending' | 'partially_paid' | 'overdue' | 'cancelled' =
+      txData.status ||
+      (txData.paidAmount && txData.paidAmount >= txData.amount
+        ? 'completed'
+        : txData.paidAmount && txData.paidAmount > 0
+        ? 'partially_paid'
+        : 'pending');
+    const staffName = activeRole === 'admin' ? 'Super Admin' : currentUser.name || 'Store Staff';
+
     const newTx: Transaction = {
       ...txData,
+      status: initialStatus,
+      responsibleStaff: txData.responsibleStaff || staffName,
+      auditTrail: [
+        {
+          id: `audit_create_${Date.now()}`,
+          timestamp: new Date().toISOString(),
+          action: 'created',
+          newStatus: initialStatus,
+          newAmount: txData.amount,
+          changedBy: staffName,
+          notes: txData.notes || 'Transaction created and posted to ledger',
+        },
+      ],
       id: `tx_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
       createdAt: new Date().toISOString(),
     };
@@ -1423,7 +1537,7 @@ export default function App() {
           />
         )}
 
-        {/* 9. REPORTS & AUDIT DAYBOOK */}
+        {/* 9. REPORTS & SAVINGS PORTAL (CUSTOMER & ADMIN SCOPED) */}
         {currentTab === 'reports' && (
           <ReportsView
             transactions={transactions}
@@ -1432,6 +1546,21 @@ export default function App() {
             codOrders={codOrders}
             products={products}
             onOpenInvoiceModal={openInvoiceModal}
+            userRole={activeRole}
+            currentUser={currentUser}
+          />
+        )}
+
+        {/* 10. COMPLETE DATE-WISE TRANSACTION HISTORY & AUDIT LEDGER */}
+        {currentTab === 'history' && (
+          <TransactionHistoryView
+            transactions={transactions}
+            customers={customers}
+            profile={profile}
+            userRole={activeRole}
+            currentUser={currentUser}
+            onOpenInvoiceModal={openInvoiceModal}
+            onUpdateTransactionStatus={handleUpdateTransactionStatus}
           />
         )}
 

@@ -59,6 +59,7 @@ const STORAGE_KEYS = {
   ACTIVE_ROLE: '100dagar_active_role_v5',
   CURRENT_USER: '100dagar_current_user_v5',
   LOGIN_AUDITS: '100dagar_login_audits_v5',
+  CATEGORIES: '100dagar_categories_v5',
 };
 
 // Safe localStorage getter
@@ -114,6 +115,41 @@ export function getProducts(): ProductItem[] {
 
 export function saveProducts(products: ProductItem[]): void {
   saveToStorage(STORAGE_KEYS.PRODUCTS, products);
+}
+
+// Centrally Managed Product Categories
+export function getCategories(): string[] {
+  const defaultCats = [
+    'Cosmetics & Personal Care',
+    'Fashion & Apparel',
+    'Decorative Items',
+    'Electronics & Gadgets',
+    'Kitchen & Home',
+    'Accessories',
+  ];
+  const products = getProducts();
+  const productCats = products.map((p) => p.category?.trim()).filter(Boolean);
+  const stored = loadFromStorage<string[]>(STORAGE_KEYS.CATEGORIES, []);
+  const combined = Array.from(new Set([...defaultCats, ...stored, ...productCats]));
+  return combined.sort((a, b) => a.localeCompare(b));
+}
+
+export function saveCategories(categories: string[]): void {
+  const clean = Array.from(new Set(categories.map((c) => c.trim()).filter(Boolean))).sort((a, b) => a.localeCompare(b));
+  saveToStorage(STORAGE_KEYS.CATEGORIES, clean);
+}
+
+export function addCategory(newCategory: string): { categories: string[]; added: boolean } {
+  const trimmed = newCategory.trim();
+  if (!trimmed) return { categories: getCategories(), added: false };
+  const current = getCategories();
+  const exists = current.some((c) => c.toLowerCase() === trimmed.toLowerCase());
+  if (!exists) {
+    const updated = [...current, trimmed].sort((a, b) => a.localeCompare(b));
+    saveCategories(updated);
+    return { categories: updated, added: true };
+  }
+  return { categories: current, added: false };
 }
 
 // Transactions

@@ -20,7 +20,7 @@ import {
 
 export const defaultBusinessProfile: BusinessProfile = {
   name: '100DAGAR',
-  tagline: 'مدینہ مارکیٹ · Wholesale & Retail Distribution',
+  tagline: 'WE BUY WE SELL',
   phone: '0312 5256 266',
   email: 'info@100dagar.pk',
   address: 'Shop # 14, Madina Market (مدینہ مارکیٹ), Shah Alam, Lahore, Pakistan',
@@ -177,6 +177,20 @@ export const defaultTransactions: Transaction[] = [
       },
     ],
     totalSavings: 34900,
+    status: 'partially_paid',
+    paymentMode: 'easypaisa',
+    responsibleStaff: 'Super Admin',
+    auditTrail: [
+      {
+        id: 'audit_tx_1_created',
+        timestamp: '2026-03-01T10:30:00Z',
+        action: 'created',
+        newStatus: 'partially_paid',
+        newAmount: 34900,
+        changedBy: 'Super Admin',
+        notes: 'Initial sale recorded with 50% advance via EasyPaisa',
+      },
+    ],
     createdAt: '2026-03-01T10:30:00Z',
   },
 ];
