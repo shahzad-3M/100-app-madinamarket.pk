@@ -156,6 +156,7 @@ export const LoginRoleModal: React.FC<LoginRoleModalProps> = ({
         urduName: 'الحاج محمد آصف (اسٹور مالک و ایڈمن)',
         phone: '03125256266',
         role: 'super_admin',
+        isAuthenticated: true,
       });
       onClose();
       return;
@@ -220,6 +221,10 @@ export const LoginRoleModal: React.FC<LoginRoleModalProps> = ({
           customerId: matchedAccount.linkedCustomerId,
           investorId: matchedAccount.linkedInvestorId,
           resellerCode: matchedAccount.linkedResellerCode,
+          branchId: matchedAccount.linkedBranchId,
+          branchName: matchedAccount.linkedBranchName,
+          managerAuthorities: matchedAccount.managerAuthorities,
+          isAuthenticated: true,
         });
         onClose();
         return;
@@ -256,6 +261,7 @@ export const LoginRoleModal: React.FC<LoginRoleModalProps> = ({
           phone: matchingReseller.phone,
           resellerCode: matchingReseller.referralCode,
           role: 'reseller',
+          isAuthenticated: true,
         });
         onClose();
         return;
@@ -312,6 +318,7 @@ export const LoginRoleModal: React.FC<LoginRoleModalProps> = ({
           phone: matchingCustomer.phone,
           customerId: matchingCustomer.id,
           role: 'customer',
+          isAuthenticated: true,
         });
         onClose();
         return;
@@ -400,8 +407,12 @@ export const LoginRoleModal: React.FC<LoginRoleModalProps> = ({
         customerId: pendingUserAccount.linkedCustomerId,
         investorId: pendingUserAccount.linkedInvestorId,
         resellerCode: pendingUserAccount.linkedResellerCode,
+        branchId: pendingUserAccount.linkedBranchId,
+        branchName: pendingUserAccount.linkedBranchName,
+        managerAuthorities: pendingUserAccount.managerAuthorities,
         mustChangePassword: false,
         hasDefaultPin: false,
+        isAuthenticated: true,
       });
     }
 
@@ -570,8 +581,8 @@ export const LoginRoleModal: React.FC<LoginRoleModalProps> = ({
                   ? 'Set Your Private Password'
                   : loginConfig.title}
               </h2>
-              <span className="text-[11px] font-medium text-slate-800 block">
-                100DAGAR · مدینہ مارکیٹ
+              <span className="text-[11px] font-bold text-amber-900 dark:text-amber-300 block tracking-wider uppercase">
+                100DAGAR · WE BUY WE SELL
               </span>
             </div>
           </div>
@@ -946,6 +957,7 @@ export const LoginRoleModal: React.FC<LoginRoleModalProps> = ({
                       name: 'Online Customer',
                       role: 'customer',
                       phone: '03125256266',
+                      isAuthenticated: false,
                     });
                     setModalMode('login');
                   }}

@@ -265,7 +265,7 @@ export const StoreCatalogView: React.FC<StoreCatalogViewProps> = ({
           </nav>
 
           {/* Quick Import from Website Button in Sidebar (USER DIRECTIVE: keep only visible import from website link for super admin hide for others) */}
-          {userRole === 'admin' && onOpenImportModal && (
+          {(userRole === 'admin' || userRole === 'super_admin' || userRole === 'manager') && onOpenImportModal && (
             <div className="pt-2">
               <button
                 onClick={onOpenImportModal}
@@ -363,8 +363,8 @@ export const StoreCatalogView: React.FC<StoreCatalogViewProps> = ({
             </div>
           </div>
 
-          {/* PRODUCT CARDS GRID (USER DIRECTIVE: show two products in row on mobile & fix device paddings) */}
-          <div className="grid grid-cols-2 gap-2 sm:gap-4 md:grid-cols-3 xl:grid-cols-4">
+          {/* PRODUCT CARDS GRID (USER DIRECTIVE: Strictly 2 products in row on mobile, 3 on tablet, 4 on desktop, 5 on xl) */}
+          <div className="grid grid-cols-2 gap-2 sm:gap-3.5 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-5">
             {filteredProducts.map((product) => {
               const savings = product.marketPrice - product.ourPrice;
               const savingsPercent = Math.round((savings / product.marketPrice) * 100);
@@ -448,6 +448,15 @@ export const StoreCatalogView: React.FC<StoreCatalogViewProps> = ({
                         <p className="font-urdu text-[10px] sm:text-[11px] text-slate-500 dark:text-slate-400 mt-0.5 truncate leading-snug">
                           {product.urduName}
                         </p>
+                      )}
+
+                      {/* Variation badge if variations exist */}
+                      {product.variations && product.variations.length > 0 && (
+                        <div className="mt-1">
+                          <span className="inline-flex items-center gap-0.5 text-[9px] font-bold text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-950/60 px-1.5 py-0.5 rounded border border-amber-200 dark:border-amber-800">
+                            ✨ {product.variations.length} Options
+                          </span>
+                        </div>
                       )}
                     </div>
 

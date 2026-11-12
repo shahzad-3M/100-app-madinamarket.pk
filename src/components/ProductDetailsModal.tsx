@@ -41,16 +41,30 @@ export const ProductDetailsModal: React.FC<ProductDetailsModalProps> = ({
     : [];
 
   const [activeImageIndex, setActiveImageIndex] = useState(0);
+  const [selectedVariationIndex, setSelectedVariationIndex] = useState<number | null>(
+    product.variations && product.variations.length > 0 ? 0 : null
+  );
   const [selectedSize, setSelectedSize] = useState<string>(
-    product.selectedSize || (product.sizes && product.sizes.length > 0 ? product.sizes[0] : 'Standard')
+    product.variations && product.variations.length > 0
+      ? product.variations[0].title
+      : product.selectedSize || (product.sizes && product.sizes.length > 0 ? product.sizes[0] : 'Standard')
   );
   const [quantity, setQuantity] = useState(1);
   const [addedAnimation, setAddedAnimation] = useState(false);
 
-  const activeImage = pictures[activeImageIndex] || product.imageUrl;
+  const activeVariation =
+    selectedVariationIndex !== null && product.variations && product.variations[selectedVariationIndex]
+      ? product.variations[selectedVariationIndex]
+      : null;
 
-  const savings = Math.max(0, product.marketPrice - product.ourPrice);
-  const savingsPercent = product.marketPrice > 0 ? Math.round((savings / product.marketPrice) * 100) : 50;
+  const activePrice = activeVariation?.ourPrice || product.ourPrice;
+  const activeMarketPrice = activeVariation?.marketPrice || product.marketPrice;
+
+  const activeImage =
+    (activeVariation?.imageUrl) || pictures[activeImageIndex] || product.imageUrl;
+
+  const savings = Math.max(0, activeMarketPrice - activePrice);
+  const savingsPercent = activeMarketPrice > 0 ? Math.round((savings / activeMarketPrice) * 100) : 50;
 
   const handleAdd = () => {
     onAddToCart(product, quantity, selectedSize);
@@ -182,10 +196,10 @@ export const ProductDetailsModal: React.FC<ProductDetailsModalProps> = ({
               <div className="bg-slate-50 dark:bg-slate-800/60 rounded-xl p-3.5 border border-slate-200 dark:border-slate-800 space-y-2">
                 <div className="flex items-baseline gap-3">
                   <span className="text-2xl font-black text-slate-900 dark:text-white font-mono">
-                    {profile.currencySymbol}{product.ourPrice.toLocaleString('en-PK')}
+                    {profile.currencySymbol}{activePrice.toLocaleString('en-PK')}
                   </span>
                   <span className="text-sm text-slate-400 line-through font-mono">
-                    {profile.currencySymbol}{product.marketPrice.toLocaleString('en-PK')}
+                    {profile.currencySymbol}{activeMarketPrice.toLocaleString('en-PK')}
                   </span>
                   <span className="text-xs font-bold text-emerald-600 bg-emerald-100 dark:bg-emerald-950/60 px-2 py-0.5 rounded">
                     -{savingsPercent}% Save
@@ -207,14 +221,53 @@ export const ProductDetailsModal: React.FC<ProductDetailsModalProps> = ({
                   <div className="text-[10px] text-slate-400 flex items-center justify-between pt-1 border-t border-slate-200 dark:border-slate-700">
                     <span>Merchant Cost: {profile.currencySymbol}{product.costPrice.toLocaleString('en-PK')}</span>
                     <span className="text-amber-600 dark:text-amber-400 font-semibold">
-                      Profit Margin: {profile.currencySymbol}{(product.ourPrice - product.costPrice).toLocaleString('en-PK')}/unit
+                      Profit Margin: {profile.currencySymbol}{(activePrice - product.costPrice).toLocaleString('en-PK')}/unit
                     </span>
                   </div>
                 )}
               </div>
 
-              {/* SIZE / VARIANT SELECTOR */}
-              {product.sizes && product.sizes.length > 0 && (
+              {/* VARIATION SELECTOR (Sizes, Colors, Options) */}
+              {product.variations && product.variations.length > 0 ? (
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5 flex items-center gap-1">
+                    <Tag className="w-3.5 h-3.5 text-amber-500" />
+                    <span>Select Variation / Option (ویریئنٹ منتخب کریں):</span>
+                  </label>
+                  <div className="grid grid-cols-2 gap-2">
+                    {product.variations.map((v, vIdx) => {
+                      const isSelected = selectedVariationIndex === vIdx;
+                      return (
+                        <button
+                          key={v.id || vIdx}
+                          type="button"
+                          onClick={() => {
+                            setSelectedVariationIndex(vIdx);
+                            setSelectedSize(v.title);
+                          }}
+                          className={`p-2 rounded-xl text-left border transition-all cursor-pointer flex items-center gap-2 ${
+                            isSelected
+                              ? 'border-amber-500 bg-amber-50/80 dark:bg-amber-950/40 ring-2 ring-amber-400'
+                              : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:border-slate-300'
+                          }`}
+                        >
+                          {v.imageUrl && (
+                            <img src={v.imageUrl} alt={v.title} className="w-8 h-8 rounded-lg object-cover shrink-0" />
+                          )}
+                          <div className="min-w-0 flex-1">
+                            <span className="text-xs font-bold text-slate-900 dark:text-white block truncate">
+                              {v.title}
+                            </span>
+                            <span className="text-[10px] text-amber-600 dark:text-amber-400 font-mono font-bold block">
+                              {profile.currencySymbol}{(v.ourPrice || product.ourPrice).toLocaleString('en-PK')}
+                            </span>
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              ) : product.sizes && product.sizes.length > 0 ? (
                 <div>
                   <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1.5 flex items-center gap-1">
                     <Tag className="w-3.5 h-3.5 text-amber-500" />
@@ -237,7 +290,7 @@ export const ProductDetailsModal: React.FC<ProductDetailsModalProps> = ({
                     ))}
                   </div>
                 </div>
-              )}
+              ) : null}
 
               {/* QUANTITY & ACTIONS */}
               <div className="space-y-2 pt-1">

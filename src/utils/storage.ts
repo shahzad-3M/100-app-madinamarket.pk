@@ -1,10 +1,12 @@
 import {
   AppUser,
   AttendanceRecord,
+  Branch,
   BroadcastContact,
   BusinessProfile,
   CategoryRecord,
   CODOrder,
+  CommissionRecord,
   Customer,
   Employee,
   Investor,
@@ -13,25 +15,32 @@ import {
   LoginAuditRecord,
   LuckyDrawEvent,
   ProductBroadcast,
+  ProductImportLog,
   ProductItem,
   RecurringInvoice,
   ReminderTemplate,
   Reseller,
   ReviewRewardSubmission,
+  SalespersonReferral,
   SavedBroadcastCampaign,
   Transaction,
   UserAccount,
   UserRole,
+  WalkInCustomer,
+  WalkInSale,
   WhatsAppNotification,
 } from '../types';
 import {
   defaultAttendance,
+  defaultBranches,
   defaultBroadcastContacts,
   defaultBusinessProfile,
   defaultCategoryRecords,
   defaultCODOrders,
+  defaultCommissionRecords,
   defaultCustomers,
   defaultEmployees,
+  defaultImportLogs,
   defaultInvestors,
   defaultInvestorTransactions,
   defaultLoginFormConfig,
@@ -43,9 +52,12 @@ import {
   defaultReminderTemplates,
   defaultResellers,
   defaultReviewRewards,
+  defaultSalespersonReferrals,
   defaultSavedBroadcasts,
   defaultTransactions,
   defaultUserAccounts,
+  defaultWalkInCustomers,
+  defaultWalkInSales,
   defaultWhatsAppNotifications,
 } from './defaultData';
 
@@ -75,6 +87,12 @@ const STORAGE_KEYS = {
   INVESTOR_TRANSACTIONS: '100dagar_investor_transactions_v5',
   USER_ACCOUNTS: '100dagar_user_accounts_v5',
   LOGIN_CONFIG: '100dagar_login_config_v5',
+  BRANCHES: '100dagar_branches_v5',
+  SP_REFERRALS: '100dagar_sp_referrals_v5',
+  WALK_IN_CUSTOMERS: '100dagar_walkin_customers_v5',
+  WALK_IN_SALES: '100dagar_walkin_sales_v5',
+  COMMISSIONS: '100dagar_commissions_v5',
+  IMPORT_LOGS: '100dagar_import_logs_v5',
 };
 
 // Safe localStorage getter
@@ -377,14 +395,16 @@ export function saveReviewRewards(submissions: ReviewRewardSubmission[]): void {
   saveToStorage(STORAGE_KEYS.REVIEW_REWARDS, submissions);
 }
 
-export const defaultCustomerUser: AppUser = {
-  id: 'user_cust_default',
-  name: 'Online Customer',
-  urduName: 'آن لائن کسٹمر',
+export const defaultGuestUser: AppUser = {
+  id: 'guest',
+  name: 'Guest Visitor',
+  urduName: 'مہمان صارف',
   role: 'customer',
-  phone: '03125256266',
-  customerId: 'cust_1',
+  phone: '',
+  isAuthenticated: false,
 };
+
+export const defaultCustomerUser: AppUser = defaultGuestUser;
 
 // Active Role & User Session (USER DIRECTIVE: Default to Customer)
 export function getActiveRole(): UserRole {
@@ -396,7 +416,14 @@ export function saveActiveRole(role: UserRole): void {
 }
 
 export function getCurrentUser(): AppUser {
-  return loadFromStorage<AppUser>(STORAGE_KEYS.CURRENT_USER, defaultCustomerUser);
+  const user = loadFromStorage<AppUser>(STORAGE_KEYS.CURRENT_USER, defaultGuestUser);
+  // If legacy session had user_cust_default or missing isAuthenticated, treat as unauthenticated guest
+  if (!user || user.id === 'user_cust_default' || user.isAuthenticated === undefined) {
+    if (user && user.role === 'customer' && user.isAuthenticated !== true) {
+      return defaultGuestUser;
+    }
+  }
+  return user;
 }
 
 export function saveCurrentUser(user: AppUser): void {
@@ -670,6 +697,80 @@ export function startFromScratchData(): void {
   saveToStorage(STORAGE_KEYS.LOGIN_AUDITS, defaultLoginAuditLogs);
 }
 
+// BRANCH MANAGEMENT
+export function getBranches(): Branch[] {
+  return loadFromStorage<Branch[]>(STORAGE_KEYS.BRANCHES, defaultBranches);
+}
+
+export function saveBranches(branches: Branch[]): void {
+  saveToStorage(STORAGE_KEYS.BRANCHES, branches);
+}
+
+export function getBranchById(id: string): Branch | undefined {
+  return getBranches().find((b) => b.id === id);
+}
+
+// SALESPERSON REFERRALS
+export function getSalespersonReferrals(): SalespersonReferral[] {
+  return loadFromStorage<SalespersonReferral[]>(STORAGE_KEYS.SP_REFERRALS, defaultSalespersonReferrals);
+}
+
+export function saveSalespersonReferrals(referrals: SalespersonReferral[]): void {
+  saveToStorage(STORAGE_KEYS.SP_REFERRALS, referrals);
+}
+
+// COMMISSION FORMULA: PKR 30 per PKR 1,000 qualifying sales (Formula: (Sales / 1000) * 30)
+export function calculateSalespersonCommission(eligibleSalesAmount: number): number {
+  if (eligibleSalesAmount < 1000) return 0;
+  return Math.floor(eligibleSalesAmount / 1000) * 30;
+}
+
+// COMMISSION RECORDS LEDGER
+export function getCommissionRecords(): CommissionRecord[] {
+  return loadFromStorage<CommissionRecord[]>(STORAGE_KEYS.COMMISSIONS, defaultCommissionRecords);
+}
+
+export function saveCommissionRecords(records: CommissionRecord[]): void {
+  saveToStorage(STORAGE_KEYS.COMMISSIONS, records);
+}
+
+// WALK-IN CUSTOMERS
+export function getWalkInCustomers(): WalkInCustomer[] {
+  return loadFromStorage<WalkInCustomer[]>(STORAGE_KEYS.WALK_IN_CUSTOMERS, defaultWalkInCustomers);
+}
+
+export function saveWalkInCustomers(customers: WalkInCustomer[]): void {
+  saveToStorage(STORAGE_KEYS.WALK_IN_CUSTOMERS, customers);
+}
+
+// WALK-IN SALES
+export function getWalkInSales(): WalkInSale[] {
+  return loadFromStorage<WalkInSale[]>(STORAGE_KEYS.WALK_IN_SALES, defaultWalkInSales);
+}
+
+export function saveWalkInSales(sales: WalkInSale[]): void {
+  saveToStorage(STORAGE_KEYS.WALK_IN_SALES, sales);
+}
+
+// PRODUCT IMPORT LOGS
+export function getProductImportLogs(): ProductImportLog[] {
+  return loadFromStorage<ProductImportLog[]>(STORAGE_KEYS.IMPORT_LOGS, defaultImportLogs);
+}
+
+export function saveProductImportLogs(logs: ProductImportLog[]): void {
+  saveToStorage(STORAGE_KEYS.IMPORT_LOGS, logs);
+}
+
+export function logProductImport(log: Omit<ProductImportLog, 'id' | 'timestamp'>): void {
+  const newLog: ProductImportLog = {
+    ...log,
+    id: `implog_${Date.now()}`,
+    timestamp: new Date().toISOString(),
+  };
+  const logs = getProductImportLogs();
+  saveProductImportLogs([newLog, ...logs.slice(0, 99)]);
+}
+
 // Export all data as JSON
 export function exportAllDataJSON(): string {
   const data = {
@@ -695,6 +796,12 @@ export function exportAllDataJSON(): string {
     investors: getInvestors(),
     investorTransactions: getInvestorTransactions(),
     userAccounts: getUserAccounts(),
+    branches: getBranches(),
+    salespersonReferrals: getSalespersonReferrals(),
+    walkInCustomers: getWalkInCustomers(),
+    walkInSales: getWalkInSales(),
+    commissionRecords: getCommissionRecords(),
+    importLogs: getProductImportLogs(),
   };
   return JSON.stringify(data, null, 2);
 }
@@ -724,6 +831,12 @@ export function importAllDataJSON(jsonStr: string): boolean {
     if (parsed.investors) saveInvestors(parsed.investors);
     if (parsed.investorTransactions) saveInvestorTransactions(parsed.investorTransactions);
     if (parsed.userAccounts) saveUserAccounts(parsed.userAccounts);
+    if (parsed.branches) saveBranches(parsed.branches);
+    if (parsed.salespersonReferrals) saveSalespersonReferrals(parsed.salespersonReferrals);
+    if (parsed.walkInCustomers) saveWalkInCustomers(parsed.walkInCustomers);
+    if (parsed.walkInSales) saveWalkInSales(parsed.walkInSales);
+    if (parsed.commissionRecords) saveCommissionRecords(parsed.commissionRecords);
+    if (parsed.importLogs) saveProductImportLogs(parsed.importLogs);
     return true;
   } catch (e) {
     console.error('Failed to import JSON data', e);

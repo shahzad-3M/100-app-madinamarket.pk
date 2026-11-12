@@ -86,6 +86,18 @@ export interface Transaction {
   createdAt: string;
 }
 
+export interface ProductVariation {
+  id: string;
+  sku?: string;
+  attributes: Record<string, string>; // e.g. { "Size": "Medium", "Color": "Black" }
+  size?: string;
+  color?: string;
+  image?: string;
+  originalPrice?: number;
+  salePrice?: number;
+  stockQty: number;
+}
+
 export interface ProductItem {
   id: string;
   name: string;
@@ -108,6 +120,12 @@ export interface ProductItem {
   pictures?: string[]; // Multiple high-res images / gallery
   sizes?: string[]; // Available sizes or dimensions (e.g. Standard, Small, Medium, Large)
   selectedSize?: string;
+  variations?: ProductVariation[]; // Extracted & editable variations (size, color, SKU, price, stock, image)
+  shortDescription?: string;
+  brand?: string;
+  tags?: string[];
+  status?: 'draft' | 'published';
+  sourceWebsiteName?: string;
   specifications?: Record<string, string>; // Full specs (Material, Power, Voltage, Dimensions, Warranty, Origin)
   details?: string; // Comprehensive description
   features?: string[]; // Bulleted feature highlights
@@ -392,6 +410,37 @@ export type UserRole =
   | 'investor'
   | 'reseller';
 
+export interface ManagerAuthorities {
+  canRegisterWalkIn: boolean;
+  canEnterSales: boolean;
+  canViewStock: boolean;
+  canManageStock: boolean;
+  canRecordPayment: boolean;
+  canRecordCash: boolean;
+  canManageOrders: boolean;
+  canManageCustomers: boolean;
+  canAssignReferral: boolean;
+  canTrackReferrals: boolean;
+  canViewReports: boolean;
+  canViewHistory: boolean;
+  canAuthorizeDiscount: boolean;
+  maxDiscountPercent?: number;
+}
+
+export interface Branch {
+  id: string;
+  name: string;
+  code: string;
+  address: string;
+  contactNumber: string;
+  assignedManagerId?: string;
+  assignedManagerName?: string;
+  status: 'active' | 'inactive';
+  createdAt: string;
+  specialAuthorities?: ManagerAuthorities;
+  remarks?: string;
+}
+
 export interface AppUser {
   id: string;
   name: string;
@@ -402,6 +451,10 @@ export interface AppUser {
   resellerCode?: string;
   customerId?: string;
   investorId?: string;
+  branchId?: string;
+  branchName?: string;
+  managerAuthorities?: ManagerAuthorities;
+  isAuthenticated?: boolean;
   mustChangePassword?: boolean;
   hasDefaultPin?: boolean;
 }
@@ -423,6 +476,9 @@ export interface UserAccount {
   linkedCustomerId?: string;
   linkedInvestorId?: string;
   linkedResellerCode?: string;
+  linkedBranchId?: string;
+  linkedBranchName?: string;
+  managerAuthorities?: ManagerAuthorities;
   resetToken?: string;
   resetTokenExpiresAt?: string;
   lastLoginAt?: string;
@@ -586,9 +642,105 @@ export interface LoginAuditRecord {
   role: UserRole;
   timestamp: string; // ISO string
   status: 'success' | 'failed';
-  ipOrDevice?: string;
+// WALK-IN CUSTOMER RECORD
+export interface WalkInCustomer {
+  id: string;
+  name: string;
+  phone: string;
+  email?: string;
+  branchId: string;
+  branchName: string;
+  registrationDate: string;
+  salespersonCode?: string;
+  status: 'active' | 'inactive';
   notes?: string;
-  usedPin?: string;
+}
+
+// WALK-IN SALE ITEM
+export interface WalkInSaleItem {
+  productId: string;
+  productName: string;
+  variationId?: string;
+  variationDetails?: string; // e.g. "Size: Standard 5-Head, Color: White"
+  quantity: number;
+  unitPrice: number;
+  marketPrice: number;
+  totalAmount: number;
+}
+
+// WALK-IN SALE TRANSACTION
+export interface WalkInSale {
+  id: string;
+  receiptNumber: string; // e.g. "POS-BR01-100D-5821"
+  branchId: string;
+  branchName: string;
+  managerId: string;
+  managerName: string;
+  customerId?: string;
+  customerName: string;
+  customerPhone: string;
+  salespersonCode?: string;
+  items: WalkInSaleItem[];
+  subtotal: number;
+  discountAmount: number;
+  discountReason?: string;
+  taxAmount?: number;
+  totalAmount: number;
+  paidAmount: number;
+  dueAmount: number;
+  paymentMethod: PaymentMode | 'cash' | 'split';
+  paymentStatus: 'completed' | 'partial' | 'pending';
+  saleDate: string;
+  timestamp: string;
+  notes?: string;
+}
+
+// SALESPERSON REFERRAL CODE
+export interface SalespersonReferral {
+  id: string;
+  code: string; // e.g. "SP-SHAHALAM-01"
+  salespersonName: string;
+  phone: string;
+  branchId: string;
+  branchName: string;
+  status: 'active' | 'inactive';
+  totalSales: number;
+  paidSales: number;
+  earnedCommission: number; // PKR 30 per PKR 1,000 qualifying sales
+  paidCommission: number;
+  createdAt: string;
+}
+
+// COMMISSION RECORD LEDGER
+export interface CommissionRecord {
+  id: string;
+  referralCode: string;
+  salespersonId: string;
+  salespersonName: string;
+  branchId: string;
+  branchName: string;
+  transactionId: string;
+  receiptNumber?: string;
+  saleType: 'walk_in' | 'online_reseller' | 'cod';
+  eligibleSalesAmount: number;
+  commissionRate: number; // PKR 30 per PKR 1,000
+  calculatedCommission: number;
+  status: 'pending' | 'paid' | 'cancelled';
+  createdAt: string;
+  paidAt?: string;
+  settlementReference?: string;
+}
+
+// PRODUCT IMPORT LOG
+export interface ProductImportLog {
+  id: string;
+  sourceUrl: string;
+  productTitle: string;
+  status: 'success' | 'failed' | 'partial';
+  variationsCount: number;
+  imagesCount: number;
+  timestamp: string;
+  notes?: string;
 }
 
 
