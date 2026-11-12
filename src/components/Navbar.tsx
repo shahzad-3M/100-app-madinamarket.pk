@@ -21,6 +21,8 @@ import {
   ChevronDown,
   Phone,
   Clock,
+  TrendingUp,
+  FolderTree,
 } from 'lucide-react';
 import { AppUser, BusinessProfile, UserRole } from '../types';
 import { openWhatsAppDirect } from '../utils/whatsapp';
@@ -93,17 +95,28 @@ export const Navbar: React.FC<NavbarProps> = ({
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  // USER DIRECTIVE: Customer Reports & History visibility
+  // 1. Customer Navigation
   const customerNavItems: NavItem[] = [
     { id: 'store', label: 'Shop & Catalog', urdu: 'مارکیٹ کیٹلاگ', icon: ShoppingBag },
-    { id: 'history', label: 'Transaction History', urdu: 'کھاتہ و تاریخ وار ہسٹری', icon: Clock },
-    { id: 'reports', label: 'My Reports & Savings', urdu: 'میرا خلاصہ و بچت رپورٹ', icon: BarChart3 },
+    { id: 'customer_portal', label: 'My Portal', urdu: 'کسٹمر پورٹل و سیکیورٹی', icon: User },
+    { id: 'history', label: 'My Orders & Khata', urdu: 'کھاتہ و ہسٹری', icon: Clock },
+    { id: 'reports', label: 'My Reports & Savings', urdu: 'میرا خلاصہ و بچت', icon: BarChart3 },
   ];
   const customerDropdownItems: NavItem[] = [
     { id: 'monthly_statement', label: 'My Monthly Statement', urdu: 'ماہانہ کسٹمر کھاتہ', icon: FileText },
     { id: 'lucky_draw', label: 'Lucky Draw & Rewards', urdu: 'لکی ڈرا اور انعامات', icon: Trophy },
   ];
 
+  // 2. Investor Navigation (Strictly isolated portfolio)
+  const investorNavItems: NavItem[] = [
+    { id: 'store', label: 'Shop & Catalog', urdu: 'مارکیٹ کیٹلاگ', icon: ShoppingBag },
+    { id: 'investors', label: 'Investor Portfolio', urdu: 'انویسٹر پورٹل و منافع', icon: TrendingUp },
+  ];
+  const investorDropdownItems: NavItem[] = [
+    { id: 'lucky_draw', label: 'Lucky Draw', urdu: 'لکی ڈرا', icon: Trophy },
+  ];
+
+  // 3. Reseller Navigation
   const resellerNavItems: NavItem[] = [
     { id: 'store', label: 'Shop & Catalog', urdu: 'مارکیٹ کیٹلاگ', icon: ShoppingBag },
     { id: 'resellers', label: 'Reseller Portal & Earnings', urdu: 'ری سیلر پورٹل', icon: Briefcase },
@@ -114,16 +127,46 @@ export const Navbar: React.FC<NavbarProps> = ({
     { id: 'lucky_draw', label: 'Lucky Draw', urdu: 'لکی ڈرا', icon: Trophy },
   ];
 
-  const merchantNavItems: NavItem[] = [
+  // 4. Staff Navigation
+  const staffNavItems: NavItem[] = [
     { id: 'store', label: 'Store & POS', urdu: 'سیل و کیٹلاگ', icon: ShoppingBag },
-    { id: 'cod_orders', label: 'COD Orders & Delivery', urdu: 'کیش آن ڈلیوری', icon: Truck, badge: codPendingCount > 0 ? codPendingCount : undefined },
-    { id: 'inventory', label: 'Inventory & Stock', urdu: 'اسٹاک و وننگ پروڈکٹس', icon: Package },
+    { id: 'cod_orders', label: 'COD Orders', urdu: 'کیش آن ڈلیوری', icon: Truck, badge: codPendingCount > 0 ? codPendingCount : undefined },
+    { id: 'reports', label: 'Daybook', urdu: 'روزنامچہ', icon: BarChart3 },
+  ];
+  const staffDropdownItems: NavItem[] = [
+    { id: 'history', label: 'History', urdu: 'ہسٹری', icon: Clock },
+    { id: 'lucky_draw', label: 'Lucky Draw', urdu: 'لکی ڈرا', icon: Trophy },
+  ];
+
+  // 5. Manager Navigation
+  const managerNavItems: NavItem[] = [
+    { id: 'store', label: 'Store & POS', urdu: 'سیل و کیٹلاگ', icon: ShoppingBag },
+    { id: 'cod_orders', label: 'COD Orders', urdu: 'ڈلیوری آرڈرز', icon: Truck, badge: codPendingCount > 0 ? codPendingCount : undefined },
+    { id: 'inventory', label: 'Inventory & Stock', urdu: 'اسٹاک و وننگ اشیاء', icon: Package },
+    { id: 'customers', label: 'Customers Khata', urdu: 'کسٹمرز کھاتہ', icon: Users },
+    { id: 'reports', label: 'Daybook & Reports', urdu: 'رپورٹس', icon: BarChart3 },
+  ];
+  const managerDropdownItems: NavItem[] = [
+    { id: 'payment_terms', label: 'Payment Terms Alerts', urdu: '۳ روزہ یاددہانی', icon: CalendarClock, badge: pendingAlertsCount > 0 ? pendingAlertsCount : undefined },
+    { id: 'history', label: 'Transaction History & Audit', urdu: 'کھاتہ ہسٹری', icon: Clock },
+    { id: 'monthly_statement', label: 'Monthly Statements', urdu: 'ماہانہ اسٹیٹمنٹ', icon: FileText },
+    { id: 'lucky_draw', label: 'Lucky Draw & Winners', urdu: 'لکی ڈرا', icon: Trophy },
+  ];
+
+  // 6. Super Admin & Admin Navigation
+  const adminNavItems: NavItem[] = [
+    { id: 'store', label: 'Store & POS', urdu: 'سیل و کیٹلاگ', icon: ShoppingBag },
+    { id: 'inventory', label: 'Inventory & Stock', urdu: 'اسٹاک و وننگ اشیاء', icon: Package },
+    { id: 'cod_orders', label: 'COD Orders', urdu: 'کیش آن ڈلیوری', icon: Truck, badge: codPendingCount > 0 ? codPendingCount : undefined },
+    { id: 'users', label: 'User Management', urdu: 'صارفین و سیکیورٹی', icon: Users },
+    { id: 'investors', label: 'Investors', urdu: 'انویسٹرز کیپٹل', icon: TrendingUp },
+    { id: 'reports', label: 'Daybook & Reports', urdu: 'روزنامچہ و آڈٹ', icon: BarChart3 },
+  ];
+  const adminDropdownItems: NavItem[] = [
+    { id: 'categories_manage', label: 'Category Cleanup', urdu: 'کیٹگریز مینجمنٹ', icon: FolderTree },
     { id: 'payment_terms', label: 'Payment Terms Alerts', urdu: '۳ روزہ یاددہانی شیڈول', icon: CalendarClock, badge: pendingAlertsCount > 0 ? pendingAlertsCount : undefined },
     { id: 'resellers', label: 'Reseller Accounts', urdu: 'ری سیلرز کمیشن', icon: Briefcase },
     { id: 'hr_payroll', label: 'HR Hiring & Payroll', urdu: 'ملازمین و تنخواہیں', icon: Users },
-    { id: 'reports', label: 'Daybook & Reports', urdu: 'روزنامچہ و آڈٹ', icon: BarChart3 },
-  ];
-  const merchantDropdownItems: NavItem[] = [
     { id: 'history', label: 'Transaction History & Audit', urdu: 'مکمل تاریخ وار کھاتہ', icon: Clock },
     { id: 'monthly_statement', label: 'Monthly Statements', urdu: 'ماہانہ اسٹیٹمنٹ', icon: FileText },
     { id: 'lucky_draw', label: 'Lucky Draw & Winners', urdu: 'لکی ڈرا لائیو', icon: Trophy },
@@ -134,16 +177,30 @@ export const Navbar: React.FC<NavbarProps> = ({
     { id: 'settings', label: 'Settings', urdu: 'سیٹنگز' },
   ];
 
+  const isSuperAdminOrAdmin = userRole === 'super_admin' || userRole === 'admin';
+
   const primaryNavItems =
-    userRole === 'admin' && viewMode === 'merchant'
-      ? merchantNavItems
+    isSuperAdminOrAdmin && viewMode === 'merchant'
+      ? adminNavItems
+      : userRole === 'manager' && viewMode === 'merchant'
+      ? managerNavItems
+      : userRole === 'staff' && viewMode === 'merchant'
+      ? staffNavItems
+      : userRole === 'investor'
+      ? investorNavItems
       : userRole === 'reseller'
       ? resellerNavItems
       : customerNavItems;
 
   const dropdownNavItems =
-    userRole === 'admin' && viewMode === 'merchant'
-      ? merchantDropdownItems
+    isSuperAdminOrAdmin && viewMode === 'merchant'
+      ? adminDropdownItems
+      : userRole === 'manager' && viewMode === 'merchant'
+      ? managerDropdownItems
+      : userRole === 'staff' && viewMode === 'merchant'
+      ? staffDropdownItems
+      : userRole === 'investor'
+      ? investorDropdownItems
       : userRole === 'reseller'
       ? resellerDropdownItems
       : customerDropdownItems;
@@ -268,18 +325,30 @@ export const Navbar: React.FC<NavbarProps> = ({
                 type="button"
                 onClick={() => onOpenRoleModal?.()}
                 className={`px-1.5 xs:px-2 sm:px-3 py-1 sm:py-1.5 text-xs font-bold rounded-lg border flex items-center gap-1 sm:gap-1.5 transition-all cursor-pointer shadow-2xs shrink-0 ${
-                  userRole === 'admin'
+                  userRole === 'super_admin' || userRole === 'admin'
                     ? 'border-amber-400 bg-amber-50 dark:bg-amber-950/60 text-amber-900 dark:text-amber-200'
-                    : userRole === 'reseller'
+                    : userRole === 'investor'
                     ? 'border-emerald-400 bg-emerald-50 dark:bg-emerald-950/60 text-emerald-900 dark:text-emerald-200'
+                    : userRole === 'manager' || userRole === 'staff'
+                    ? 'border-blue-400 bg-blue-50 dark:bg-blue-950/60 text-blue-900 dark:text-blue-200'
+                    : userRole === 'reseller'
+                    ? 'border-teal-400 bg-teal-50 dark:bg-teal-950/60 text-teal-900 dark:text-teal-200'
                     : 'border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 hover:border-amber-400'
                 }`}
                 title="Account Login / Portal"
               >
                 <User className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400 shrink-0" />
                 <span className="truncate max-w-[65px] xs:max-w-[85px] sm:max-w-[130px]">
-                  {userRole === 'admin'
+                  {userRole === 'super_admin'
                     ? 'Super Admin'
+                    : userRole === 'admin'
+                    ? 'Admin'
+                    : userRole === 'investor'
+                    ? (currentUser?.name ? `Inv: ${currentUser.name.split(' ')[0]}` : 'Investor')
+                    : userRole === 'manager'
+                    ? (currentUser?.name || 'Manager')
+                    : userRole === 'staff'
+                    ? (currentUser?.name || 'Staff')
                     : userRole === 'reseller'
                     ? (currentUser?.name || 'Reseller')
                     : currentUser?.name && currentUser.name !== 'Online Customer'

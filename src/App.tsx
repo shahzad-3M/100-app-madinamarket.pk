@@ -109,6 +109,10 @@ import { ScheduleWhatsAppModal } from './components/ScheduleWhatsAppModal';
 import { AddRecurringInvoiceModal } from './components/AddRecurringInvoiceModal';
 import { ProductBroadcastModal } from './components/ProductBroadcastModal';
 import { InvoiceModal } from './components/InvoiceModal';
+import { UserManagementView } from './components/UserManagementView';
+import { InvestorManagementView } from './components/InvestorManagementView';
+import { CustomerPortalView } from './components/CustomerPortalView';
+import { CategoryManagementModal } from './components/CategoryManagementModal';
 
 export default function App() {
   // Main Data States
@@ -148,6 +152,7 @@ export default function App() {
 
   // Navigation & Filter States
   const [currentTab, setCurrentTab] = useState<string>('store'); // Default to Store & POS Catalog matching screenshot!
+  const [isCategoryModalOpen, setIsCategoryModalOpen] = useState(false);
   const [viewMode, setViewMode] = useState<'customer' | 'merchant'>(() => {
     const role = getActiveRole();
     return role === 'customer' ? 'customer' : 'merchant';
@@ -155,6 +160,33 @@ export default function App() {
   const [selectedCustomerId, setSelectedCustomerId] = useState<string | undefined>(undefined);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('All Categories');
+
+  const handleTabChange = (tab: string) => {
+    if (tab === 'categories_manage') {
+      setIsCategoryModalOpen(true);
+      return;
+    }
+    if (activeRole === 'customer') {
+      const allowed = ['store', 'customer_portal', 'history', 'reports', 'monthly_statement', 'lucky_draw'];
+      if (!allowed.includes(tab)) {
+        setCurrentTab('store');
+        return;
+      }
+    } else if (activeRole === 'investor') {
+      const allowed = ['store', 'investors', 'lucky_draw'];
+      if (!allowed.includes(tab)) {
+        setCurrentTab('investors');
+        return;
+      }
+    } else if (activeRole === 'reseller') {
+      const allowed = ['store', 'resellers', 'history', 'monthly_statement', 'lucky_draw'];
+      if (!allowed.includes(tab)) {
+        setCurrentTab('resellers');
+        return;
+      }
+    }
+    setCurrentTab(tab);
+  };
 
   // Theme State
   const [darkMode, setDarkMode] = useState<boolean>(() => {
@@ -697,14 +729,23 @@ export default function App() {
         ...userDetails,
         role: newRole,
       };
-    } else if (newRole === 'admin') {
+    } else if (newRole === 'super_admin' || newRole === 'admin') {
       updatedUser = {
         id: 'user_admin_1',
         name: 'Al-Haj Muhammad Asif',
         urduName: 'الحاج محمد آصف (اسٹور مالک و ایڈمن)',
-        role: 'admin',
+        role: newRole,
         phone: '03125256266',
         resellerCode: 'RES-100D-01',
+      };
+    } else if (newRole === 'investor') {
+      updatedUser = {
+        id: 'user_investor_1',
+        name: 'Chaudhry Nadeem (Investor)',
+        urduName: 'چوہدری ندیم (انویسٹر)',
+        role: 'investor',
+        phone: '03009876543',
+        investorId: 'inv_1',
       };
     } else if (newRole === 'reseller') {
       updatedUser = {
@@ -714,6 +755,14 @@ export default function App() {
         role: 'reseller',
         phone: '03125256266',
         resellerCode: 'RES-100D-01',
+      };
+    } else if (newRole === 'manager' || newRole === 'staff') {
+      updatedUser = {
+        id: `user_${newRole}_1`,
+        name: newRole === 'manager' ? 'Branch Manager' : 'Sales Staff',
+        urduName: newRole === 'manager' ? 'برانچ مینیجر' : 'اسٹور اسٹاف',
+        role: newRole,
+        phone: '03125256266',
       };
     } else {
       updatedUser = {
@@ -757,9 +806,10 @@ export default function App() {
           saveCustomers(updatedCusts);
         }
       }
-      if (currentTab !== 'store' && currentTab !== 'lucky_draw' && currentTab !== 'monthly_statement' && currentTab !== 'resellers') {
-        setCurrentTab('store');
-      }
+      setCurrentTab('store');
+    } else if (newRole === 'investor') {
+      setViewMode('merchant');
+      setCurrentTab('investors');
     } else {
       setViewMode('merchant');
     }
@@ -771,9 +821,7 @@ export default function App() {
     setCurrentUser(defaultCustomerUser);
     saveCurrentUser(defaultCustomerUser);
     setViewMode('customer');
-    if (currentTab !== 'store' && currentTab !== 'lucky_draw' && currentTab !== 'monthly_statement' && currentTab !== 'resellers') {
-      setCurrentTab('store');
-    }
+    setCurrentTab('store');
   };
 
   // INVENTORY PRODUCT HANDLERS
@@ -1190,7 +1238,7 @@ export default function App() {
       {/* Top Navbar with Yellow Bar (Matching Screenshot Exact Theme) */}
       <Navbar
         currentTab={currentTab}
-        onTabChange={(tab) => setCurrentTab(tab)}
+        onTabChange={handleTabChange}
         onOpenAddTransaction={() => openAddTransaction('credit')}
         onOpenCart={() => setIsCheckoutOpen(true)}
         cartCount={cartCount}
@@ -1258,9 +1306,45 @@ export default function App() {
               setIsWebsiteImportModalOpen(true);
               setCurrentTab('inventory');
             }}
+            onOpenCategoryModal={() => setIsCategoryModalOpen(true)}
             isCustomerView={viewMode === 'customer' || activeRole === 'customer'}
             hideCostPrice={viewMode === 'customer' || activeRole === 'customer'}
             userRole={activeRole}
+          />
+        )}
+
+        {/* CUSTOMER SELF-SERVICE PORTAL */}
+        {currentTab === 'customer_portal' && (
+          <CustomerPortalView
+            currentUser={currentUser}
+            customer={customers.find(
+              (c) =>
+                c.id === currentUser.customerId ||
+                (currentUser.phone && c.phone.replace(/\D/g, '') === currentUser.phone.replace(/\D/g, ''))
+            )}
+            transactions={transactions}
+            profile={profile}
+            onLogout={handleLogout}
+            onOpenCart={() => setIsCheckoutOpen(true)}
+            onNavigateTab={handleTabChange}
+          />
+        )}
+
+        {/* INVESTOR MANAGEMENT & PORTFOLIO */}
+        {currentTab === 'investors' && (
+          <InvestorManagementView
+            currentUser={currentUser}
+            userRole={activeRole}
+            products={products}
+            profile={profile}
+          />
+        )}
+
+        {/* USER CREDENTIALS & SECURITY MANAGEMENT */}
+        {currentTab === 'users' && (
+          <UserManagementView
+            currentUserRole={activeRole}
+            onRefreshSession={handleRefreshAllData}
           />
         )}
 
@@ -1762,6 +1846,16 @@ export default function App() {
           profile={profile}
         />
       )}
+
+      {/* CATEGORY CLEANUP & PARENT/SUB-CATEGORY MANAGEMENT MODAL */}
+      <CategoryManagementModal
+        isOpen={isCategoryModalOpen}
+        onClose={() => setIsCategoryModalOpen(false)}
+        products={products}
+        onCategoriesUpdated={() => {
+          setProducts(getProducts());
+        }}
+      />
     </div>
   );
 }

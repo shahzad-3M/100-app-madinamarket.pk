@@ -39,7 +39,7 @@ export async function hashPassword(plainText: string, salt: string): Promise<str
   if (typeof window !== 'undefined' && window.crypto && window.crypto.subtle) {
     try {
       const data = str2ab(saltedInput);
-      const digestBuffer = await window.crypto.subtle.digest('SHA-256', data);
+      const digestBuffer = await window.crypto.subtle.digest('SHA-256', data.buffer as ArrayBuffer);
       return buf2hex(digestBuffer);
     } catch (e) {
       console.warn('SubtleCrypto error, falling back to basic hash', e);
