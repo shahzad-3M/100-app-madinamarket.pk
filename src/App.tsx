@@ -1982,7 +1982,6 @@ export default function App() {
           </div>
           <div className="flex items-center gap-2 text-[11px]">
             <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
-            <span>۳ روزہ نرم یاددہانی، تاریخ ادائیگی اور لکی ڈرا سسٹم فعال</span>
             <span className="text-slate-300 dark:text-slate-700">·</span>
             <button
               onClick={() => {
