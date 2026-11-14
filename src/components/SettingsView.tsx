@@ -26,8 +26,11 @@ import {
   RotateCcw,
   UserCheck,
   AlertCircle,
+  MapPin,
+  Plus,
 } from 'lucide-react';
-import { BusinessProfile, Customer, LoginAuditRecord, Reseller } from '../types';
+import { BusinessProfile, Customer, DeliveryCityConfig, LoginAuditRecord, Reseller } from '../types';
+import { defaultDeliveryCities } from '../utils/defaultData';
 import {
   exportAllDataJSON,
   importAllDataJSON,
@@ -86,6 +89,44 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const [userRoleFilter, setUserRoleFilter] = useState<'all' | 'customer' | 'reseller'>('all');
   const [userListNotice, setUserListNotice] = useState<string | null>(null);
   const [revealedPins, setRevealedPins] = useState<Record<string, boolean>>({});
+  const [newDeliveryCity, setNewDeliveryCity] = useState('');
+
+  const deliveryCities: DeliveryCityConfig[] =
+    formData.deliveryCities && formData.deliveryCities.length > 0
+      ? formData.deliveryCities
+      : defaultDeliveryCities;
+
+  const handleToggleSettingsCity = (cityName: string) => {
+    const updated = deliveryCities.map((c) =>
+      c.name === cityName ? { ...c, allowed: !c.allowed } : c
+    );
+    const nextProf = { ...formData, deliveryCities: updated };
+    setFormData(nextProf);
+    onSaveProfile(nextProf);
+  };
+
+  const handleResetSettingsCities = () => {
+    const fresh = defaultDeliveryCities.map((c) => ({ ...c }));
+    const nextProf = { ...formData, deliveryCities: fresh };
+    setFormData(nextProf);
+    onSaveProfile(nextProf);
+    setSavedSuccess(true);
+    setTimeout(() => setSavedSuccess(false), 2500);
+  };
+
+  const handleAddSettingsCity = () => {
+    const trimmed = newDeliveryCity.trim();
+    if (!trimmed) return;
+    if (deliveryCities.some((c) => c.name.toLowerCase() === trimmed.toLowerCase())) {
+      setNewDeliveryCity('');
+      return;
+    }
+    const updated = [...deliveryCities, { name: trimmed, allowed: true }];
+    const nextProf = { ...formData, deliveryCities: updated };
+    setFormData(nextProf);
+    onSaveProfile(nextProf);
+    setNewDeliveryCity('');
+  };
 
   const handleProfileSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -895,6 +936,72 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               </button>
             </div>
           </form>
+
+          {/* Delivery Cities Availability & Checkmark Manager */}
+          <div className="mt-6 pt-6 border-t border-slate-200 dark:border-slate-800 space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div className="flex items-center gap-2.5">
+                <span className="p-2 rounded-lg bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300">
+                  <MapPin className="w-4 h-4" />
+                </span>
+                <div>
+                  <h4 className="text-sm font-bold text-slate-900 dark:text-white">
+                    Checkout Delivery Cities (Checkmark Allow / Disallow &amp; Reset)
+                  </h4>
+                  <p className="text-xs text-slate-500 dark:text-slate-400">
+                    Default city: <b>Muzaffarabad</b>. Only checked cities appear in Checkout delivery selection.
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={handleResetSettingsCities}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-amber-800 dark:text-amber-200 bg-amber-100 hover:bg-amber-200 dark:bg-amber-950/60 dark:hover:bg-amber-900 rounded-lg cursor-pointer shrink-0"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+                <span>Reset Cities</span>
+              </button>
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2">
+              {deliveryCities.map((c) => (
+                <label
+                  key={c.name}
+                  className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-xs cursor-pointer select-none ${
+                    c.allowed
+                      ? 'bg-emerald-50/60 dark:bg-emerald-950/25 border-emerald-200 dark:border-emerald-800 text-slate-900 dark:text-white font-semibold'
+                      : 'bg-slate-50 dark:bg-slate-800/50 border-slate-200 dark:border-slate-700 text-slate-400 line-through'
+                  }`}
+                >
+                  <input
+                    type="checkbox"
+                    checked={c.allowed}
+                    onChange={() => handleToggleSettingsCity(c.name)}
+                    className="w-4 h-4 rounded text-emerald-600 cursor-pointer"
+                  />
+                  <span className="truncate">{c.name}</span>
+                </label>
+              ))}
+            </div>
+
+            <div className="flex items-center gap-2 max-w-sm">
+              <input
+                type="text"
+                value={newDeliveryCity}
+                onChange={(e) => setNewDeliveryCity(e.target.value)}
+                placeholder="Add custom delivery city..."
+                className="flex-1 px-3 py-1.5 text-xs rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
+              />
+              <button
+                type="button"
+                onClick={handleAddSettingsCity}
+                className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-bold bg-slate-900 dark:bg-amber-500 text-white dark:text-slate-950 rounded-lg cursor-pointer"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Add City</span>
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

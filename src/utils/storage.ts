@@ -8,6 +8,7 @@ import {
   CODOrder,
   CommissionRecord,
   Customer,
+  DeliveryCityConfig,
   Employee,
   Investor,
   InvestorTransaction,
@@ -28,6 +29,7 @@ import {
   UserRole,
   WalkInCustomer,
   WalkInSale,
+  WasalSettlement,
   WhatsAppNotification,
 } from '../types';
 import {
@@ -39,6 +41,7 @@ import {
   defaultCODOrders,
   defaultCommissionRecords,
   defaultCustomers,
+  defaultDeliveryCities,
   defaultEmployees,
   defaultImportLogs,
   defaultInvestors,
@@ -58,6 +61,7 @@ import {
   defaultUserAccounts,
   defaultWalkInCustomers,
   defaultWalkInSales,
+  defaultWasalSettlements,
   defaultWhatsAppNotifications,
 } from './defaultData';
 
@@ -93,6 +97,7 @@ const STORAGE_KEYS = {
   WALK_IN_SALES: '100dagar_walkin_sales_v5',
   COMMISSIONS: '100dagar_commissions_v5',
   IMPORT_LOGS: '100dagar_import_logs_v5',
+  WASAL_SETTLEMENTS: '100dagar_wasal_settlements_v5',
 };
 
 // Safe localStorage getter
@@ -125,11 +130,23 @@ export function getBusinessProfile(): BusinessProfile {
   if (!prof.adminPin) {
     prof.adminPin = '580987';
   }
+  if (!prof.deliveryCities || prof.deliveryCities.length === 0) {
+    prof.deliveryCities = defaultDeliveryCities.map((c) => ({ ...c }));
+  } else if (!prof.deliveryCities.some((c) => c.name.toLowerCase() === 'muzaffarabad')) {
+    prof.deliveryCities = [{ name: 'Muzaffarabad', allowed: true }, ...prof.deliveryCities];
+  }
   return prof;
 }
 
 export function saveBusinessProfile(profile: BusinessProfile): void {
   saveToStorage(STORAGE_KEYS.PROFILE, profile);
+}
+
+export function resetDeliveryCities(): DeliveryCityConfig[] {
+  const prof = getBusinessProfile();
+  const fresh = defaultDeliveryCities.map((c) => ({ ...c }));
+  saveBusinessProfile({ ...prof, deliveryCities: fresh });
+  return fresh;
 }
 
 // Customers
@@ -359,6 +376,15 @@ export function saveCODOrders(orders: CODOrder[]): void {
   saveToStorage(STORAGE_KEYS.COD_ORDERS, orders);
 }
 
+// WASAL Delivery Settlements (Amount Received from Courier)
+export function getWasalSettlements(): WasalSettlement[] {
+  return loadFromStorage<WasalSettlement[]>(STORAGE_KEYS.WASAL_SETTLEMENTS, defaultWasalSettlements);
+}
+
+export function saveWasalSettlements(settlements: WasalSettlement[]): void {
+  saveToStorage(STORAGE_KEYS.WASAL_SETTLEMENTS, settlements);
+}
+
 // HR Employees
 export function getEmployees(): Employee[] {
   return loadFromStorage<Employee[]>(STORAGE_KEYS.EMPLOYEES, defaultEmployees);
@@ -408,7 +434,11 @@ export const defaultCustomerUser: AppUser = defaultGuestUser;
 
 // Active Role & User Session (USER DIRECTIVE: Default to Customer)
 export function getActiveRole(): UserRole {
-  return loadFromStorage<UserRole>(STORAGE_KEYS.ACTIVE_ROLE, 'customer');
+  const user = getCurrentUser();
+  if (!user || user.isAuthenticated !== true) {
+    return 'customer';
+  }
+  return loadFromStorage<UserRole>(STORAGE_KEYS.ACTIVE_ROLE, user.role || 'customer');
 }
 
 export function saveActiveRole(role: UserRole): void {
@@ -417,11 +447,9 @@ export function saveActiveRole(role: UserRole): void {
 
 export function getCurrentUser(): AppUser {
   const user = loadFromStorage<AppUser>(STORAGE_KEYS.CURRENT_USER, defaultGuestUser);
-  // If legacy session had user_cust_default or missing isAuthenticated, treat as unauthenticated guest
-  if (!user || user.id === 'user_cust_default' || user.isAuthenticated === undefined) {
-    if (user && user.role === 'customer' && user.isAuthenticated !== true) {
-      return defaultGuestUser;
-    }
+  // If legacy session had user_cust_default or isAuthenticated is not strictly true, treat as unauthenticated guest
+  if (!user || user.id === 'user_cust_default' || user.isAuthenticated !== true) {
+    return defaultGuestUser;
   }
   return user;
 }
@@ -503,7 +531,50 @@ export function saveInvestorTransactions(txs: InvestorTransaction[]): void {
 
 // USER ACCOUNTS & CREDENTIAL MANAGEMENT
 export function getUserAccounts(): UserAccount[] {
-  return loadFromStorage<UserAccount[]>(STORAGE_KEYS.USER_ACCOUNTS, defaultUserAccounts);
+  const saved = loadFromStorage<UserAccount[]>(STORAGE_KEYS.USER_ACCOUNTS, defaultUserAccounts);
+  let didMigrate = false;
+
+  const normalized = saved.map((u) => {
+    let next = u;
+    if (u.username.toLowerCase() === 'bilal_manager' && u.id === 'usr_manager_1') {
+      didMigrate = true;
+      next = { ...next, id: 'usr_manager_bilal' };
+    }
+    if (u.id === 'usr_superadmin' || u.role === 'super_admin') {
+      const needsSuperAdminSync =
+        u.fullName === 'Al-Haj Muhammad Asif' ||
+        u.email === 'owner@100dagar.pk' ||
+        u.suggestedDefaultPin !== undefined ||
+        u.fullName !== 'Shahzad Malik' ||
+        u.phone !== '03125256266' ||
+        u.email !== 'admin@madinamarket.pk';
+      if (needsSuperAdminSync) {
+        didMigrate = true;
+        const { suggestedDefaultPin: _removed, ...rest } = next;
+        next = {
+          ...rest,
+          fullName: 'Shahzad Malik',
+          urduName: 'شہزاد ملک (سپر ایڈمن)',
+          phone: '03125256266',
+          email: 'admin@madinamarket.pk',
+          canAuthorizeCreditSale: true,
+        };
+      }
+    }
+    return next;
+  });
+
+  // Merge any missing default accounts by username without overwriting existing edits/passwords
+  const existingUsernames = new Set(normalized.map((u) => u.username.toLowerCase()));
+  const missingDefaults = defaultUserAccounts.filter(
+    (def) => !existingUsernames.has(def.username.toLowerCase())
+  );
+  if (missingDefaults.length > 0 || didMigrate) {
+    const merged = [...normalized, ...missingDefaults];
+    saveToStorage(STORAGE_KEYS.USER_ACCOUNTS, merged);
+    return merged;
+  }
+  return normalized;
 }
 
 export function saveUserAccounts(accounts: UserAccount[]): void {
@@ -802,6 +873,7 @@ export function exportAllDataJSON(): string {
     walkInSales: getWalkInSales(),
     commissionRecords: getCommissionRecords(),
     importLogs: getProductImportLogs(),
+    wasalSettlements: getWasalSettlements(),
   };
   return JSON.stringify(data, null, 2);
 }
@@ -837,6 +909,7 @@ export function importAllDataJSON(jsonStr: string): boolean {
     if (parsed.walkInSales) saveWalkInSales(parsed.walkInSales);
     if (parsed.commissionRecords) saveCommissionRecords(parsed.commissionRecords);
     if (parsed.importLogs) saveProductImportLogs(parsed.importLogs);
+    if (parsed.wasalSettlements) saveWasalSettlements(parsed.wasalSettlements);
     return true;
   } catch (e) {
     console.error('Failed to import JSON data', e);

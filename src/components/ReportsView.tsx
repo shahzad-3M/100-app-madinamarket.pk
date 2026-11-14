@@ -21,9 +21,11 @@ import {
   Eye,
   User,
   ShieldCheck,
+  Wallet,
 } from 'lucide-react';
 import { BusinessProfile, CODOrder, Customer, ProductItem, Transaction } from '../types';
 import { calculateDaysOverdue, openWhatsAppDirect, formatPaymentChannelsText } from '../utils/whatsapp';
+import { getWasalSettlements } from '../utils/storage';
 import { FinancialVisuals } from './FinancialVisuals';
 
 interface ReportsViewProps {
@@ -48,8 +50,36 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
   currentUser,
 }) => {
   const [dateRange, setDateRange] = useState<'all' | 'this_month' | 'last_month' | 'this_week'>('this_month');
-  const [reportType, setReportType] = useState<'daily_closing' | 'summary' | 'daybook' | 'aging'>('daily_closing');
+  const [reportType, setReportType] = useState<'daily_closing' | 'wasal_daybook' | 'summary' | 'daybook'>('daily_closing');
   const [selectedDailyDate, setSelectedDailyDate] = useState<string>(() => new Date().toISOString().split('T')[0]);
+  const [wasalReportDate, setWasalReportDate] = useState<string>('');
+
+  const wasalSettlements = useMemo(() => getWasalSettlements(), []);
+  const allWasalOrders = useMemo(
+    () => codOrders.filter((o) => o.courierPartner === 'WASAL delivery'),
+    [codOrders]
+  );
+  const filteredWasalOrders = useMemo(() => {
+    if (!wasalReportDate) return allWasalOrders;
+    return allWasalOrders.filter(
+      (o) =>
+        o.createdAt.startsWith(wasalReportDate) ||
+        o.dispatchedAt?.startsWith(wasalReportDate) ||
+        o.deliveredAt?.startsWith(wasalReportDate)
+    );
+  }, [allWasalOrders, wasalReportDate]);
+  const filteredWasalSettlements = useMemo(() => {
+    if (!wasalReportDate) return wasalSettlements;
+    return wasalSettlements.filter((s) => s.date === wasalReportDate);
+  }, [wasalSettlements, wasalReportDate]);
+  const wasalDispatchedOrders = filteredWasalOrders.filter((o) => o.status === 'dispatched');
+  const wasalDispatchedAmount = wasalDispatchedOrders.reduce((s, o) => s + o.totalAmount, 0);
+  const wasalDeliveredOrders = filteredWasalOrders.filter((o) => o.status === 'delivered');
+  const wasalDeliveredAmount = wasalDeliveredOrders.reduce((s, o) => s + o.totalAmount, 0);
+  const wasalDeliveredSubtotal = wasalDeliveredOrders.reduce((s, o) => s + o.subtotal, 0);
+  const wasalDeliveredFees = wasalDeliveredOrders.reduce((s, o) => s + o.deliveryFee, 0);
+  const wasalReceivedAmount = filteredWasalSettlements.reduce((s, x) => s + x.amount, 0);
+  const wasalDueBalance = wasalDeliveredAmount - wasalReceivedAmount;
 
   const todayStr = new Date().toISOString().split('T')[0];
   const customerMap = new Map<string, Customer>();
@@ -562,7 +592,7 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
       />
 
       {/* Report View Toggle */}
-      <div className="flex items-center gap-1 p-1 bg-slate-100 dark:bg-slate-800 rounded-lg w-fit text-xs font-semibold no-print">
+      <div className="flex flex-wrap items-center gap-1 p-1 bg-slate-100 dark:bg-slate-800 rounded-lg w-fit text-xs font-semibold no-print">
         <button
           onClick={() => setReportType('daily_closing')}
           className={`px-3 py-1.5 rounded-md cursor-pointer ${
@@ -572,6 +602,16 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
           }`}
         >
           Daily Closing &amp; Audit Report (ڈیلی روزنامچہ)
+        </button>
+        <button
+          onClick={() => setReportType('wasal_daybook')}
+          className={`px-3 py-1.5 rounded-md cursor-pointer ${
+            reportType === 'wasal_daybook'
+              ? 'bg-emerald-600 text-white font-black shadow-xs'
+              : 'text-slate-600 dark:text-slate-400'
+          }`}
+        >
+          WASAL Delivery Daybook ({allWasalOrders.length})
         </button>
         <button
           onClick={() => setReportType('summary')}
@@ -917,6 +957,192 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
                   ))
                 )}
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* REPORT 0B: WASAL Delivery Separation Daybook */}
+      {reportType === 'wasal_daybook' && (
+        <div className="space-y-6">
+          <div className="bg-white dark:bg-slate-900 border border-emerald-200 dark:border-emerald-800/60 rounded-2xl p-4 sm:p-5 shadow-2xs flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="text-base font-black text-slate-900 dark:text-white flex items-center gap-2">
+                <Truck className="w-5 h-5 text-emerald-600" />
+                <span>WASAL Delivery Separation Daybook Report (واصل ڈلیوری روزنامچہ)</span>
+              </h2>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                Separated accounting report for WASAL dispatched orders, delivered order amounts, settlements received, and balance due.
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2 no-print">
+              <input
+                type="date"
+                value={wasalReportDate}
+                onChange={(e) => setWasalReportDate(e.target.value)}
+                className="px-3 py-1.5 text-xs rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-mono"
+              />
+              {wasalReportDate && (
+                <button
+                  type="button"
+                  onClick={() => setWasalReportDate('')}
+                  className="px-2.5 py-1.5 text-xs font-bold text-amber-600 bg-amber-50 dark:bg-amber-950/40 rounded-lg cursor-pointer"
+                >
+                  All Dates
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => window.print()}
+                className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs rounded-xl cursor-pointer"
+              >
+                <Printer className="w-3.5 h-3.5" />
+                <span>Print WASAL Daybook</span>
+              </button>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="bg-white dark:bg-slate-900 border border-blue-200 dark:border-blue-900/60 rounded-2xl p-4 shadow-2xs space-y-1">
+              <div className="flex items-center justify-between text-xs text-slate-500">
+                <span className="font-bold text-blue-700 dark:text-blue-400">Dispatched Orders</span>
+                <Truck className="w-4 h-4 text-blue-600" />
+              </div>
+              <p className="text-xl font-black font-mono text-blue-600 dark:text-blue-400">
+                {profile.currencySymbol}{wasalDispatchedAmount.toLocaleString('en-PK')}
+              </p>
+              <span className="text-[11px] text-slate-500 font-mono block">
+                {wasalDispatchedOrders.length} Dispatched Order(s)
+              </span>
+            </div>
+
+            <div className="bg-white dark:bg-slate-900 border border-emerald-200 dark:border-emerald-900/60 rounded-2xl p-4 shadow-2xs space-y-1">
+              <div className="flex items-center justify-between text-xs text-slate-500">
+                <span className="font-bold text-emerald-700 dark:text-emerald-400">Delivered Orders</span>
+                <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+              </div>
+              <p className="text-xl font-black font-mono text-emerald-600 dark:text-emerald-400">
+                {profile.currencySymbol}{wasalDeliveredAmount.toLocaleString('en-PK')}
+              </p>
+              <span className="text-[11px] text-slate-500 font-mono block">
+                {wasalDeliveredOrders.length} Delivered · Net {profile.currencySymbol}{wasalDeliveredSubtotal.toLocaleString('en-PK')} + Fees {profile.currencySymbol}{wasalDeliveredFees.toLocaleString('en-PK')}
+              </span>
+            </div>
+
+            <div className="bg-white dark:bg-slate-900 border border-teal-200 dark:border-teal-900/60 rounded-2xl p-4 shadow-2xs space-y-1">
+              <div className="flex items-center justify-between text-xs text-slate-500">
+                <span className="font-bold text-teal-700 dark:text-teal-400">Amount Received for WASAL</span>
+                <Wallet className="w-4 h-4 text-teal-600" />
+              </div>
+              <p className="text-xl font-black font-mono text-teal-600 dark:text-teal-400">
+                {profile.currencySymbol}{wasalReceivedAmount.toLocaleString('en-PK')}
+              </p>
+              <span className="text-[11px] text-slate-500 font-mono block">
+                {filteredWasalSettlements.length} Settlement(s) Recorded
+              </span>
+            </div>
+
+            <div className="bg-white dark:bg-slate-900 border border-amber-200 dark:border-amber-900/60 rounded-2xl p-4 shadow-2xs space-y-1">
+              <div className="flex items-center justify-between text-xs text-slate-500">
+                <span className="font-bold text-amber-700 dark:text-amber-400">Due to WASAL Delivery</span>
+                <DollarSign className="w-4 h-4 text-amber-600" />
+              </div>
+              <p className="text-xl font-black font-mono text-amber-600 dark:text-amber-400">
+                {profile.currencySymbol}{Math.abs(wasalDueBalance).toLocaleString('en-PK')}
+              </p>
+              <span className="text-[11px] text-slate-500 font-mono block">
+                {wasalDueBalance > 0
+                  ? 'Delivered COD Pending Remittance'
+                  : wasalDueBalance < 0
+                  ? 'Over-settled / Balance Payable to WASAL'
+                  : 'Settled & Clear'}
+              </span>
+            </div>
+          </div>
+
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 shadow-xs">
+            <h3 className="text-sm font-bold text-slate-900 dark:text-white mb-3">
+              WASAL Delivery Orders Register ({filteredWasalOrders.length})
+            </h3>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-slate-50 dark:bg-slate-800/80 border-b border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 text-[11px] uppercase">
+                  <tr>
+                    <th className="py-2 px-3">Date</th>
+                    <th className="py-2 px-3">Order # / Tracking</th>
+                    <th className="py-2 px-3">Customer &amp; City</th>
+                    <th className="py-2 px-3 text-center">Status</th>
+                    <th className="py-2 px-3 text-right">Subtotal</th>
+                    <th className="py-2 px-3 text-right">Delivery Fee</th>
+                    <th className="py-2 px-3 text-right">Total Amount</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                  {filteredWasalOrders.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} className="py-8 text-center text-slate-400">
+                        No WASAL delivery orders in this period.
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredWasalOrders.map((ord) => (
+                      <tr key={ord.id}>
+                        <td className="py-2 px-3 font-mono">{ord.createdAt.split('T')[0]}</td>
+                        <td className="py-2 px-3 font-mono font-bold">
+                          #{ord.orderNumber} <span className="text-[10px] text-blue-600 font-normal">({ord.trackingNumber || 'WSL'})</span>
+                        </td>
+                        <td className="py-2 px-3">
+                          {ord.customerName} <span className="text-slate-400">· {ord.city}</span>
+                        </td>
+                        <td className="py-2 px-3 text-center uppercase text-[10px] font-bold">{ord.status}</td>
+                        <td className="py-2 px-3 text-right font-mono">{profile.currencySymbol}{ord.subtotal.toLocaleString('en-PK')}</td>
+                        <td className="py-2 px-3 text-right font-mono">{profile.currencySymbol}{ord.deliveryFee.toLocaleString('en-PK')}</td>
+                        <td className="py-2 px-3 text-right font-mono font-bold">{profile.currencySymbol}{ord.totalAmount.toLocaleString('en-PK')}</td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 shadow-xs">
+            <h3 className="text-sm font-bold text-slate-900 dark:text-white mb-3">
+              WASAL Settlement Receipts ({filteredWasalSettlements.length})
+            </h3>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-slate-50 dark:bg-slate-800/80 border-b border-slate-200 dark:border-slate-800 text-slate-600 dark:text-slate-300 text-[11px] uppercase">
+                  <tr>
+                    <th className="py-2 px-3">Date</th>
+                    <th className="py-2 px-3">Mode</th>
+                    <th className="py-2 px-3">Reference</th>
+                    <th className="py-2 px-3">Notes</th>
+                    <th className="py-2 px-3 text-right">Amount Received</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                  {filteredWasalSettlements.length === 0 ? (
+                    <tr>
+                      <td colSpan={5} className="py-6 text-center text-slate-400">
+                        No settlement receipts recorded. Record settlements from COD Orders → WASAL Delivery Separation Daybook.
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredWasalSettlements.map((s) => (
+                      <tr key={s.id}>
+                        <td className="py-2 px-3 font-mono">{s.date}</td>
+                        <td className="py-2 px-3 uppercase font-bold text-[10px]">{s.paymentMode}</td>
+                        <td className="py-2 px-3 font-mono">{s.reference || '-'}</td>
+                        <td className="py-2 px-3 text-slate-500">{s.notes || 'WASAL COD settlement'}</td>
+                        <td className="py-2 px-3 text-right font-mono font-bold text-teal-600">
+                          {profile.currencySymbol}{s.amount.toLocaleString('en-PK')}
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
             </div>
           </div>
         </div>

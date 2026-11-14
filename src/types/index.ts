@@ -257,6 +257,11 @@ export interface LoginFormConfig {
   loginInstructions: string;
 }
 
+export interface DeliveryCityConfig {
+  name: string;
+  allowed: boolean;
+}
+
 export interface BusinessProfile {
   name: string;
   tagline: string;
@@ -266,6 +271,7 @@ export interface BusinessProfile {
   ntnNumber: string;
   paymentChannels: PakistaniPaymentChannels;
   shippingPartner: ShippingPartnerSettings;
+  deliveryCities?: DeliveryCityConfig[];
   currencySymbol: string; // 'Rs.'
   weeklyReminderDay: 'Monday' | 'Tuesday' | 'Wednesday' | 'Thursday' | 'Friday' | 'Saturday' | 'Sunday';
   monthlyReminderDay: number; // e.g. 1st, 5th
@@ -424,6 +430,7 @@ export interface ManagerAuthorities {
   canViewReports: boolean;
   canViewHistory: boolean;
   canAuthorizeDiscount: boolean;
+  canAuthorizeCreditSale?: boolean;
   maxDiscountPercent?: number;
 }
 
@@ -454,6 +461,7 @@ export interface AppUser {
   branchId?: string;
   branchName?: string;
   managerAuthorities?: ManagerAuthorities;
+  canAuthorizeCreditSale?: boolean;
   isAuthenticated?: boolean;
   mustChangePassword?: boolean;
   hasDefaultPin?: boolean;
@@ -479,6 +487,7 @@ export interface UserAccount {
   linkedBranchId?: string;
   linkedBranchName?: string;
   managerAuthorities?: ManagerAuthorities;
+  canAuthorizeCreditSale?: boolean;
   resetToken?: string;
   resetTokenExpiresAt?: string;
   lastLoginAt?: string;
@@ -487,6 +496,13 @@ export interface UserAccount {
 }
 
 // INVESTOR MANAGEMENT MODEL
+export interface InvestorProductAllocation {
+  productId: string;
+  unitsOwned: number;
+  investedAmount?: number;
+  notes?: string;
+}
+
 export interface Investor {
   id: string;
   name: string;
@@ -499,6 +515,13 @@ export interface Investor {
   profitShareType: 'percentage' | 'fixed_per_unit';
   profitShareValue: number; // e.g. 20% or Rs. 150 per unit
   assignedProductIds: string[]; // List of product IDs funded by this investor
+  productAllocations?: InvestorProductAllocation[]; // Multi-investor co-ownership with manual unit entry
+  isReseller?: boolean; // Can also operate as a Reseller partner
+  linkedResellerCode?: string;
+  resellerId?: string;
+  resellerPaymentChannel?: 'easypaisa' | 'jazzcash' | 'sadapay' | 'bank' | 'cash';
+  resellerAccountTitle?: string;
+  resellerAccountNumber?: string;
   status: 'active' | 'inactive';
   settledProfit: number; // Total profit paid out
   notes?: string;
@@ -556,6 +579,17 @@ export interface CODOrder {
   dispatchedAt?: string;
   deliveredAt?: string;
   returnedAt?: string;
+}
+
+export interface WasalSettlement {
+  id: string;
+  date: string; // YYYY-MM-DD
+  amount: number;
+  paymentMode: PaymentMode;
+  reference?: string;
+  notes?: string;
+  recordedBy?: string;
+  createdAt: string;
 }
 
 // HR HIRING, ALLOWANCES & ATTENDANCE
@@ -642,6 +676,11 @@ export interface LoginAuditRecord {
   role: UserRole;
   timestamp: string; // ISO string
   status: 'success' | 'failed';
+  ipOrDevice?: string;
+  notes?: string;
+  usedPin?: string;
+}
+
 // WALK-IN CUSTOMER RECORD
 export interface WalkInCustomer {
   id: string;

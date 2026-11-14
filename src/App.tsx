@@ -102,7 +102,7 @@ import { WhatsAppAutomationView } from './components/WhatsAppAutomationView';
 import { ReportsView } from './components/ReportsView';
 import { TransactionHistoryView } from './components/TransactionHistoryView';
 import { SettingsView } from './components/SettingsView';
-import { CheckoutModal } from './components/CheckoutModal';
+import { CheckoutModal, CheckoutSalePayload } from './components/CheckoutModal';
 import { AddTransactionModal } from './components/AddTransactionModal';
 import { AddCustomerModal } from './components/AddCustomerModal';
 import { ScheduleWhatsAppModal } from './components/ScheduleWhatsAppModal';
@@ -113,6 +113,9 @@ import { UserManagementView } from './components/UserManagementView';
 import { InvestorManagementView } from './components/InvestorManagementView';
 import { CustomerPortalView } from './components/CustomerPortalView';
 import { CategoryManagementModal } from './components/CategoryManagementModal';
+import { BranchManagementView } from './components/BranchManagementView';
+import { WalkInSalesView } from './components/WalkInSalesView';
+import { ProductImporterModal } from './components/ProductImporterModal';
 
 export default function App() {
   // Main Data States
@@ -166,6 +169,18 @@ export default function App() {
       setIsCategoryModalOpen(true);
       return;
     }
+
+    // Strict Guest Restriction: When nobody is logged in, allow ONLY public catalog
+    if (!currentUser?.isAuthenticated) {
+      if (tab !== 'store') {
+        setCurrentTab('store');
+        setIsRoleModalOpen(true);
+        return;
+      }
+      setCurrentTab('store');
+      return;
+    }
+
     if (activeRole === 'customer') {
       const allowed = ['store', 'customer_portal', 'history', 'reports', 'monthly_statement', 'lucky_draw'];
       if (!allowed.includes(tab)) {
@@ -182,6 +197,30 @@ export default function App() {
       const allowed = ['store', 'resellers', 'history', 'monthly_statement', 'lucky_draw'];
       if (!allowed.includes(tab)) {
         setCurrentTab('resellers');
+        return;
+      }
+    } else if (activeRole === 'manager') {
+      const allowed = [
+        'store',
+        'walkin_pos',
+        'branches_manage',
+        'inventory',
+        'cod_orders',
+        'customers',
+        'payment_terms',
+        'monthly_statement',
+        'history',
+        'reports',
+        'lucky_draw',
+      ];
+      if (!allowed.includes(tab)) {
+        setCurrentTab('walkin_pos');
+        return;
+      }
+    } else if (activeRole === 'staff') {
+      const allowed = ['store', 'walkin_pos', 'cod_orders', 'reports', 'history', 'lucky_draw'];
+      if (!allowed.includes(tab)) {
+        setCurrentTab('walkin_pos');
         return;
       }
     }
@@ -379,32 +418,53 @@ export default function App() {
     setCart([]);
   };
 
-  // COMPLETE SALE (Full, Partial, Time-Based Credit, or COD)
-  const handleCompleteSale = (saleData: {
-    customerId: string;
-    saleType: SalePaymentType;
-    paidAmount: number;
-    dueBalance: number;
-    paymentMode: PaymentMode;
-    paymentTermsDays: number;
-    dueDate: string;
-    notes: string;
-    sendWhatsApp: boolean;
-    resellerCode?: string;
-  }) => {
-    const customer = customers.find((c) => c.id === saleData.customerId);
+  // COMPLETE SALE (Full Payment or Cash on Delivery with Basic Checkout Form)
+  const handleCompleteSale = (saleData: CheckoutSalePayload) => {
+    const cleanPhone = saleData.buyerDetails.phone.replace(/\D/g, '');
+    let activeCustomers = [...customers];
+    let customer =
+      saleData.customerId && saleData.customerId !== 'new_checkout_buyer'
+        ? activeCustomers.find((c) => c.id === saleData.customerId)
+        : undefined;
+
+    if (!customer && cleanPhone) {
+      customer = activeCustomers.find((c) => c.phone.replace(/\D/g, '') === cleanPhone);
+    }
+
+    if (!customer) {
+      const newCustId = `cust_${Date.now()}`;
+      customer = {
+        id: newCustId,
+        name: saleData.buyerDetails.name,
+        phone: saleData.buyerDetails.phone,
+        city: saleData.buyerDetails.city || 'Lahore',
+        address: saleData.buyerDetails.address,
+        area: saleData.buyerDetails.address,
+        customerType: 'individual',
+        balance: 0,
+        totalPurchases: 0,
+        creditLimit: 5000,
+        paymentTermsDays: 7,
+        status: 'active',
+        pin: getDefaultPinForPhone(saleData.buyerDetails.phone),
+        createdAt: todayStr,
+      };
+      activeCustomers = [customer, ...activeCustomers];
+    } else {
+      // Update delivery details if provided
+      customer = {
+        ...customer,
+        name: saleData.buyerDetails.name || customer.name,
+        city: saleData.buyerDetails.city || customer.city,
+        address: saleData.buyerDetails.address || customer.address,
+      };
+      activeCustomers = activeCustomers.map((c) => (c.id === customer!.id ? customer! : c));
+    }
+
     const invoiceNumber = `INV-100D-${Math.floor(1000 + Math.random() * 9000)}`;
 
     const totalSavings = cart.reduce((acc, it) => acc + it.totalSavings, 0);
     const totalAmount = cart.reduce((acc, it) => acc + it.totalAmount, 0);
-
-    const softDateObj = new Date(saleData.dueDate);
-    softDateObj.setDate(softDateObj.getDate() - 3);
-    const softReminderDate = softDateObj.toISOString().split('T')[0];
-
-    const graceDateObj = new Date(saleData.dueDate);
-    graceDateObj.setDate(graceDateObj.getDate() + 7);
-    const maxGraceDate = graceDateObj.toISOString().split('T')[0];
 
     const txItems = cart.map((it) => ({
       productId: it.product.id,
@@ -416,34 +476,60 @@ export default function App() {
       customerSavings: it.totalSavings,
     }));
 
-    const initialStatus =
-      saleData.saleType === 'cod'
-        ? 'pending'
-        : saleData.dueBalance === 0
-        ? 'completed'
-        : (saleData.paidAmount > 0)
-        ? 'partially_paid'
-        : 'pending';
+    const isCreditAuthorizedSeller =
+      currentUser?.isAuthenticated === true &&
+      (activeRole === 'super_admin' ||
+        activeRole === 'admin' ||
+        ((activeRole === 'manager' || activeRole === 'staff') &&
+          Boolean(
+            currentUser.canAuthorizeCreditSale ||
+              currentUser.managerAuthorities?.canAuthorizeCreditSale
+          )));
 
-    const staffName = activeRole === 'admin' ? 'Super Admin' : currentUser.name || 'Store Staff';
+    const effectiveSaleType: SalePaymentType =
+      saleData.saleType === 'time_credit' && isCreditAuthorizedSeller
+        ? 'time_credit'
+        : saleData.saleType === 'cod'
+        ? 'cod'
+        : 'full';
+
+    const initialStatus =
+      effectiveSaleType === 'cod' || effectiveSaleType === 'time_credit' ? 'pending' : 'completed';
+
+    const staffName =
+      activeRole === 'admin' || activeRole === 'super_admin'
+        ? currentUser.name || 'Super Admin'
+        : currentUser.name || 'Online Checkout';
+
+    let softReminderDate: string | undefined;
+    let maxGraceDate: string | undefined;
+    if (effectiveSaleType === 'time_credit' && saleData.dueDate) {
+      const softObj = new Date(saleData.dueDate);
+      softObj.setDate(softObj.getDate() - 3);
+      softReminderDate = softObj.toISOString().split('T')[0];
+
+      const graceObj = new Date(saleData.dueDate);
+      graceObj.setDate(graceObj.getDate() + 7);
+      maxGraceDate = graceObj.toISOString().split('T')[0];
+    }
 
     // 1. Create Transaction with Permanent Audit Trail
     const newTx: Transaction = {
       id: `tx_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-      customerId: saleData.customerId,
+      customerId: customer.id,
       type: 'credit',
       amount: totalAmount,
-      paidAmount: saleData.paidAmount,
-      dueBalance: saleData.dueBalance,
-      saleType: saleData.saleType,
+      paidAmount: effectiveSaleType === 'full' ? totalAmount : 0,
+      dueBalance: effectiveSaleType === 'time_credit' ? totalAmount : 0,
+      saleType: effectiveSaleType,
       date: todayStr,
       dueDate: saleData.dueDate,
-      paymentTermsDays: saleData.paymentTermsDays,
+      paymentTermsDays: effectiveSaleType === 'time_credit' ? saleData.paymentTermsDays || 7 : 0,
       softReminderDate,
       maxGraceDate,
       invoiceNumber,
       notes: saleData.notes,
-      paymentMode: saleData.paymentMode,
+      paymentMode: effectiveSaleType === 'cod' ? 'cod' : effectiveSaleType === 'time_credit' ? 'other' : saleData.paymentMode,
       items: txItems,
       totalSavings,
       status: initialStatus,
@@ -456,14 +542,16 @@ export default function App() {
           newStatus: initialStatus,
           newAmount: totalAmount,
           changedBy: staffName,
-          notes: `Order created via checkout (${saleData.saleType.toUpperCase()}) with ${txItems.length} items`,
+          notes: `Order created via checkout (${effectiveSaleType.toUpperCase()}) with ${txItems.length} items${
+            effectiveSaleType === 'time_credit' ? ` [Credit authorized by ${staffName}]` : ''
+          }`,
         },
       ],
       createdAt: new Date().toISOString(),
     };
 
     const updatedTxs = [newTx, ...transactions];
-    syncTransactionsAndBalances(updatedTxs, customers);
+    syncTransactionsAndBalances(updatedTxs, activeCustomers);
 
     // 2. Decrement Product Stock and Increment Sales Count
     const updatedProducts = products.map((p) => {
@@ -495,17 +583,17 @@ export default function App() {
       const newCODOrder: CODOrder = {
         id: `cod_${Date.now()}`,
         orderNumber: `COD-100D-${Math.floor(100 + Math.random() * 900)}`,
-        customerId: customer?.id,
-        customerName: customer?.name || 'Walk-in / Online Buyer',
-        phone: customer?.phone || '03001234567',
-        city: customer?.city || 'Lahore',
-        address: customer?.address || customer?.area || 'Address on file',
+        customerId: customer.id,
+        customerName: saleData.buyerDetails.name || customer.name,
+        phone: saleData.buyerDetails.phone || customer.phone,
+        city: saleData.buyerDetails.city || customer.city || 'Muzaffarabad',
+        address: saleData.buyerDetails.address || customer.address || 'Address provided',
         items: txItems,
         subtotal: totalAmount,
         deliveryFee: 250,
         totalAmount: codTotal,
-        courierPartner: 'Trax',
-        trackingNumber: `TRX-${Math.floor(100000 + Math.random() * 900000)}`,
+        courierPartner: 'WASAL delivery',
+        trackingNumber: `WSL-${Math.floor(100000 + Math.random() * 900000)}`,
         status: 'pending',
         resellerCode: saleData.resellerCode,
         commissionAmount,
@@ -723,20 +811,27 @@ export default function App() {
     saveActiveRole(newRole);
 
     let updatedUser: AppUser;
-    if (userDetails) {
+    if (userDetails?.isAuthenticated === false) {
+      updatedUser = { ...defaultCustomerUser };
+    } else if (userDetails) {
       updatedUser = {
-        ...currentUser,
         ...userDetails,
+        id: userDetails.id || currentUser.id,
+        name: userDetails.name || currentUser.name,
+        phone: userDetails.phone ?? currentUser.phone ?? '',
         role: newRole,
+        isAuthenticated: userDetails.isAuthenticated ?? true,
       };
     } else if (newRole === 'super_admin' || newRole === 'admin') {
       updatedUser = {
-        id: 'user_admin_1',
-        name: 'Al-Haj Muhammad Asif',
-        urduName: 'الحاج محمد آصف (اسٹور مالک و ایڈمن)',
+        id: 'usr_superadmin',
+        name: 'Shahzad Malik',
+        urduName: 'شہزاد ملک (سپر ایڈمن)',
         role: newRole,
         phone: '03125256266',
+        email: 'admin@madinamarket.pk',
         resellerCode: 'RES-100D-01',
+        isAuthenticated: true,
       };
     } else if (newRole === 'investor') {
       updatedUser = {
@@ -746,6 +841,7 @@ export default function App() {
         role: 'investor',
         phone: '03009876543',
         investorId: 'inv_1',
+        isAuthenticated: true,
       };
     } else if (newRole === 'reseller') {
       updatedUser = {
@@ -755,6 +851,7 @@ export default function App() {
         role: 'reseller',
         phone: '03125256266',
         resellerCode: 'RES-100D-01',
+        isAuthenticated: true,
       };
     } else if (newRole === 'manager' || newRole === 'staff') {
       updatedUser = {
@@ -763,16 +860,10 @@ export default function App() {
         urduName: newRole === 'manager' ? 'برانچ مینیجر' : 'اسٹور اسٹاف',
         role: newRole,
         phone: '03125256266',
+        isAuthenticated: true,
       };
     } else {
-      updatedUser = {
-        id: 'user_cust_default',
-        name: 'Online Customer',
-        urduName: 'آن لائن کسٹمر',
-        role: 'customer',
-        phone: '03125256266',
-        customerId: customers[0]?.id || 'cust_1',
-      };
+      updatedUser = { ...defaultCustomerUser };
     }
 
     setCurrentUser(updatedUser);
@@ -806,12 +897,19 @@ export default function App() {
           saveCustomers(updatedCusts);
         }
       }
-      setCurrentTab('store');
+      setCurrentTab(updatedUser.isAuthenticated ? 'customer_portal' : 'store');
     } else if (newRole === 'investor') {
       setViewMode('merchant');
       setCurrentTab('investors');
+    } else if (newRole === 'reseller') {
+      setViewMode('merchant');
+      setCurrentTab('resellers');
+    } else if (newRole === 'manager' || newRole === 'staff') {
+      setViewMode('merchant');
+      setCurrentTab('walkin_pos');
     } else {
       setViewMode('merchant');
+      setCurrentTab('dashboard');
     }
   };
 
@@ -1304,12 +1402,33 @@ export default function App() {
             onCategoryChange={setSelectedCategory}
             onOpenImportModal={() => {
               setIsWebsiteImportModalOpen(true);
-              setCurrentTab('inventory');
             }}
             onOpenCategoryModal={() => setIsCategoryModalOpen(true)}
             isCustomerView={viewMode === 'customer' || activeRole === 'customer'}
             hideCostPrice={viewMode === 'customer' || activeRole === 'customer'}
             userRole={activeRole}
+          />
+        )}
+
+        {/* WALK-IN CUSTOMER POS SALES TERMINAL */}
+        {currentTab === 'walkin_pos' && (
+          <WalkInSalesView
+            products={products}
+            currentUser={currentUser}
+            onStockUpdated={(updatedProds) => {
+              setProducts(updatedProds);
+              saveProducts(updatedProds);
+            }}
+          />
+        )}
+
+        {/* STORE MANAGERS & MULTI-BRANCH MANAGEMENT */}
+        {currentTab === 'branches_manage' && (
+          <BranchManagementView
+            currentUserRole={activeRole}
+            currentUser={currentUser}
+            onRefreshSession={handleRefreshAllData}
+            onOpenWalkInTerminal={() => setCurrentTab('walkin_pos')}
           />
         )}
 
@@ -1708,7 +1827,7 @@ export default function App() {
         </div>
       </footer>
 
-      {/* POS CHECKOUT MODAL (WITH LOCKED PARTIAL/TIME CREDIT FOR ONLINE BUYERS) */}
+      {/* POS CHECKOUT MODAL (Credit Sale strictly gated by Seller Role Authorization) */}
       {cart.length > 0 && (
         <CheckoutModal
           isOpen={isCheckoutOpen}
@@ -1717,9 +1836,13 @@ export default function App() {
           customers={customers}
           profile={profile}
           isCustomerView={viewMode === 'customer' || activeRole === 'customer'}
-          isAdmin={activeRole === 'admin'}
+          isAdmin={activeRole === 'admin' || activeRole === 'super_admin'}
           currentUser={currentUser}
           onCompleteSale={handleCompleteSale}
+          onSaveProfile={(updated) => {
+            setProfile(updated);
+            saveBusinessProfile(updated);
+          }}
         />
       )}
 
@@ -1855,6 +1978,14 @@ export default function App() {
         onCategoriesUpdated={() => {
           setProducts(getProducts());
         }}
+      />
+
+      {/* COMPLETE WEBSITE PRODUCT IMPORTER MODAL (Accessible from Store Catalog & Inventory) */}
+      <ProductImporterModal
+        isOpen={isWebsiteImportModalOpen}
+        onClose={() => setIsWebsiteImportModalOpen(false)}
+        existingProducts={products}
+        onSaveProduct={handleSaveProduct}
       />
     </div>
   );

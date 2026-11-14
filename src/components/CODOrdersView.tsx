@@ -18,9 +18,24 @@ import {
   ShieldCheck,
   ChevronRight,
   Sparkles,
+  BookOpen,
+  Calendar,
+  Trash2,
+  Wallet,
+  X,
 } from 'lucide-react';
-import { BusinessProfile, CODOrder, CODOrderStatus, Customer, ProductItem, Transaction } from '../types';
+import {
+  BusinessProfile,
+  CODOrder,
+  CODOrderStatus,
+  Customer,
+  PaymentMode,
+  ProductItem,
+  WasalSettlement,
+} from '../types';
 import { openWhatsAppDirect } from '../utils/whatsapp';
+import { getWasalSettlements, saveWasalSettlements } from '../utils/storage';
+import { defaultDeliveryCities } from '../utils/defaultData';
 
 interface CODOrdersViewProps {
   orders: CODOrder[];
@@ -43,15 +58,41 @@ export const CODOrdersView: React.FC<CODOrdersViewProps> = ({
   onUpdateOrderStatus,
   onAddNewCODOrder,
 }) => {
+  const allowedCities = React.useMemo(() => {
+    const list =
+      profile.deliveryCities && profile.deliveryCities.length > 0
+        ? profile.deliveryCities
+        : defaultDeliveryCities;
+    const active = list.filter((c) => c.allowed);
+    return active.length > 0 ? active : defaultDeliveryCities.filter((c) => c.allowed);
+  }, [profile.deliveryCities]);
+
+  const defaultCityName =
+    allowedCities.find((c) => c.name.toLowerCase() === 'muzaffarabad')?.name ||
+    allowedCities[0]?.name ||
+    'Muzaffarabad';
+
+  const [viewModeTab, setViewModeTab] = useState<'all_cod' | 'wasal_daybook'>('all_cod');
   const [selectedStatusTab, setSelectedStatusTab] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [isAddOrderOpen, setIsAddOrderOpen] = useState(false);
   const [selectedOrderForPrint, setSelectedOrderForPrint] = useState<CODOrder | null>(null);
+  const [feedbackNotice, setFeedbackNotice] = useState<string | null>(null);
+
+  // WASAL Separation Daybook state
+  const [wasalDateFilter, setWasalDateFilter] = useState<string>(''); // '' = All Dates
+  const [wasalSettlements, setWasalSettlements] = useState<WasalSettlement[]>(() => getWasalSettlements());
+  const [isSettlementModalOpen, setIsSettlementModalOpen] = useState(false);
+  const [settlementDate, setSettlementDate] = useState<string>(() => new Date().toISOString().split('T')[0]);
+  const [settlementAmount, setSettlementAmount] = useState<string>('');
+  const [settlementMode, setSettlementMode] = useState<PaymentMode>('bank_transfer');
+  const [settlementRef, setSettlementRef] = useState<string>('');
+  const [settlementNotes, setSettlementNotes] = useState<string>('');
 
   // New Order Form State
   const [newCustName, setNewCustName] = useState('');
   const [newPhone, setNewPhone] = useState('');
-  const [newCity, setNewCity] = useState('Lahore');
+  const [newCity, setNewCity] = useState(defaultCityName);
   const [newAddress, setNewAddress] = useState('');
   const [newProductId, setNewProductId] = useState(products[0]?.id || '');
   const [newQty, setNewQty] = useState(1);
@@ -63,6 +104,78 @@ export const CODOrdersView: React.FC<CODOrdersViewProps> = ({
 
   const shipperHelpline = profile.shippingPartner?.shipperPhone || profile.phone || '0312 5256 266';
   const shipperName = profile.shippingPartner?.name || 'WASAL delivery';
+
+  // WASAL Daybook Calculations
+  const allWasalOrders = React.useMemo(
+    () => orders.filter((o) => o.courierPartner === 'WASAL delivery'),
+    [orders]
+  );
+
+  const filteredWasalOrders = React.useMemo(() => {
+    if (!wasalDateFilter) return allWasalOrders;
+    return allWasalOrders.filter((o) => {
+      const createdDate = o.createdAt.split('T')[0];
+      const dispDate = o.dispatchedAt?.split('T')[0];
+      const delivDate = o.deliveredAt?.split('T')[0];
+      return (
+        createdDate === wasalDateFilter ||
+        dispDate === wasalDateFilter ||
+        delivDate === wasalDateFilter
+      );
+    });
+  }, [allWasalOrders, wasalDateFilter]);
+
+  const filteredWasalSettlements = React.useMemo(() => {
+    if (!wasalDateFilter) return wasalSettlements;
+    return wasalSettlements.filter((s) => s.date === wasalDateFilter);
+  }, [wasalSettlements, wasalDateFilter]);
+
+  const wasalDispatchedOrders = filteredWasalOrders.filter((o) => o.status === 'dispatched');
+  const wasalDispatchedAmount = wasalDispatchedOrders.reduce((sum, o) => sum + o.totalAmount, 0);
+
+  const wasalDeliveredOrders = filteredWasalOrders.filter((o) => o.status === 'delivered');
+  const wasalDeliveredAmount = wasalDeliveredOrders.reduce((sum, o) => sum + o.totalAmount, 0);
+  const wasalDeliveredSubtotal = wasalDeliveredOrders.reduce((sum, o) => sum + o.subtotal, 0);
+  const wasalDeliveredFees = wasalDeliveredOrders.reduce((sum, o) => sum + o.deliveryFee, 0);
+
+  const wasalTotalReceived = filteredWasalSettlements.reduce((sum, s) => sum + s.amount, 0);
+  const wasalDueBalance = wasalDeliveredAmount - wasalTotalReceived;
+
+  const handleRecordWasalSettlement = (e: React.FormEvent) => {
+    e.preventDefault();
+    const numericAmt = parseFloat(settlementAmount);
+    if (!numericAmt || numericAmt <= 0) {
+      setFeedbackNotice('Please enter a valid received amount greater than 0.');
+      return;
+    }
+    const newEntry: WasalSettlement = {
+      id: `wasal_set_${Date.now()}`,
+      date: settlementDate,
+      amount: numericAmt,
+      paymentMode: settlementMode,
+      reference: settlementRef.trim() || undefined,
+      notes: settlementNotes.trim() || undefined,
+      recordedBy: 'Admin / Accounts',
+      createdAt: new Date().toISOString(),
+    };
+    const updated = [newEntry, ...wasalSettlements];
+    setWasalSettlements(updated);
+    saveWasalSettlements(updated);
+    setIsSettlementModalOpen(false);
+    setSettlementAmount('');
+    setSettlementRef('');
+    setSettlementNotes('');
+    setFeedbackNotice(
+      `Recorded WASAL settlement receipt of ${profile.currencySymbol}${numericAmt.toLocaleString('en-PK')} (${settlementDate}).`
+    );
+  };
+
+  const handleDeleteWasalSettlement = (id: string) => {
+    const updated = wasalSettlements.filter((s) => s.id !== id);
+    setWasalSettlements(updated);
+    saveWasalSettlements(updated);
+    setFeedbackNotice('WASAL settlement entry removed.');
+  };
 
   const handleSyncShipday = () => {
     setIsSyncingShipday(true);
@@ -167,6 +280,420 @@ export const CODOrdersView: React.FC<CODOrdersViewProps> = ({
 
   return (
     <div className="space-y-6">
+      {/* Inline Feedback Notice */}
+      {feedbackNotice && (
+        <div className="bg-emerald-50 dark:bg-emerald-950/50 border border-emerald-200 dark:border-emerald-800 rounded-xl px-4 py-2.5 flex items-center justify-between text-xs text-emerald-800 dark:text-emerald-200">
+          <span className="font-bold">{feedbackNotice}</span>
+          <button
+            type="button"
+            onClick={() => setFeedbackNotice(null)}
+            className="text-emerald-700 dark:text-emerald-300 hover:underline font-bold cursor-pointer"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
+
+      {/* VIEW SWITCHER: ALL COD PARCELS vs WASAL DELIVERY SEPARATION DAYBOOK */}
+      <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl p-3 shadow-2xs flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            onClick={() => setViewModeTab('all_cod')}
+            className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-extrabold transition-all cursor-pointer ${
+              viewModeTab === 'all_cod'
+                ? 'bg-slate-900 dark:bg-amber-500 text-white dark:text-slate-950 shadow-xs'
+                : 'bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700'
+            }`}
+          >
+            <Package className="w-4 h-4" />
+            <span>All COD Parcels ({orders.length})</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setViewModeTab('wasal_daybook')}
+            className={`inline-flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-extrabold transition-all cursor-pointer ${
+              viewModeTab === 'wasal_daybook'
+                ? 'bg-emerald-600 text-white shadow-xs'
+                : 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800 hover:bg-emerald-100 dark:hover:bg-emerald-950/70'
+            }`}
+          >
+            <BookOpen className="w-4 h-4" />
+            <span>WASAL Delivery Separation Daybook ({allWasalOrders.length})</span>
+          </button>
+        </div>
+
+        <div className="text-[11px] font-mono text-slate-500 dark:text-slate-400">
+          Default COD City: <b className="text-emerald-600 dark:text-emerald-400">{defaultCityName}</b>
+        </div>
+      </div>
+
+      {/* WASAL DELIVERY SEPARATION DAYBOOK VIEW */}
+      {viewModeTab === 'wasal_daybook' && (
+        <div className="space-y-6">
+          {/* Header & Controls */}
+          <div className="bg-white dark:bg-slate-900 border border-emerald-200 dark:border-emerald-800/60 rounded-2xl p-4 sm:p-5 shadow-2xs flex flex-wrap items-center justify-between gap-4">
+            <div>
+              <h2 className="text-base font-black text-slate-900 dark:text-white flex items-center gap-2">
+                <Truck className="w-5 h-5 text-emerald-600" />
+                <span>WASAL Delivery Separation Daybook (واصل ڈلیوری روزنامچہ)</span>
+              </h2>
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                Separated ledger for WASAL delivery courier orders: dispatched totals, delivered cash, amount received, and balance due to/from WASAL.
+              </p>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="flex items-center gap-1.5 bg-slate-100 dark:bg-slate-800 px-2.5 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700">
+                <Calendar className="w-3.5 h-3.5 text-slate-500" />
+                <input
+                  type="date"
+                  value={wasalDateFilter}
+                  onChange={(e) => setWasalDateFilter(e.target.value)}
+                  className="bg-transparent text-xs font-mono text-slate-900 dark:text-white focus:outline-hidden"
+                />
+                {wasalDateFilter && (
+                  <button
+                    type="button"
+                    onClick={() => setWasalDateFilter('')}
+                    className="text-[10px] font-bold text-amber-600 hover:underline cursor-pointer pl-1"
+                  >
+                    All Dates
+                  </button>
+                )}
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setIsSettlementModalOpen(true)}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl shadow-xs cursor-pointer"
+              >
+                <Wallet className="w-3.5 h-3.5" />
+                <span>+ Record Amount Received</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setIsAddOrderOpen(true)}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-slate-900 dark:bg-amber-500 text-white dark:text-slate-950 font-bold text-xs rounded-xl cursor-pointer shadow-xs"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span>Book WASAL Parcel</span>
+              </button>
+            </div>
+          </div>
+
+          {/* 4 SEPARATED WASAL KPI SUMMARY CARDS */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            {/* 1. Dispatched Orders Amount */}
+            <div className="bg-white dark:bg-slate-900 border border-blue-200 dark:border-blue-900/60 rounded-2xl p-4 shadow-2xs space-y-1">
+              <div className="flex items-center justify-between text-xs text-slate-500">
+                <span className="font-bold text-blue-700 dark:text-blue-400">
+                  1. Dispatched Orders (روانہ شدہ)
+                </span>
+                <span className="p-1.5 rounded-lg bg-blue-50 dark:bg-blue-950/60 text-blue-600">
+                  <Truck className="w-4 h-4" />
+                </span>
+              </div>
+              <p className="text-xl font-extrabold font-mono text-blue-600 dark:text-blue-400">
+                {profile.currencySymbol}{wasalDispatchedAmount.toLocaleString('en-PK')}
+              </p>
+              <span className="text-[11px] text-slate-500 font-mono block">
+                {wasalDispatchedOrders.length} Dispatched Order(s) in Transit
+              </span>
+            </div>
+
+            {/* 2. Delivered Orders Amount */}
+            <div className="bg-white dark:bg-slate-900 border border-emerald-200 dark:border-emerald-900/60 rounded-2xl p-4 shadow-2xs space-y-1">
+              <div className="flex items-center justify-between text-xs text-slate-500">
+                <span className="font-bold text-emerald-700 dark:text-emerald-400">
+                  2. Delivered Orders (ڈلیور شدہ)
+                </span>
+                <span className="p-1.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/60 text-emerald-600">
+                  <CheckCircle2 className="w-4 h-4" />
+                </span>
+              </div>
+              <p className="text-xl font-extrabold font-mono text-emerald-600 dark:text-emerald-400">
+                {profile.currencySymbol}{wasalDeliveredAmount.toLocaleString('en-PK')}
+              </p>
+              <span className="text-[11px] text-slate-500 font-mono block">
+                {wasalDeliveredOrders.length} Delivered · Net {profile.currencySymbol}{wasalDeliveredSubtotal.toLocaleString('en-PK')} + Fees {profile.currencySymbol}{wasalDeliveredFees.toLocaleString('en-PK')}
+              </span>
+            </div>
+
+            {/* 3. Amount Received for WASAL */}
+            <div className="bg-white dark:bg-slate-900 border border-teal-200 dark:border-teal-900/60 rounded-2xl p-4 shadow-2xs space-y-1">
+              <div className="flex items-center justify-between text-xs text-slate-500">
+                <span className="font-bold text-teal-700 dark:text-teal-400">
+                  3. Amount Received for WASAL (وصول رقم)
+                </span>
+                <span className="p-1.5 rounded-lg bg-teal-50 dark:bg-teal-950/60 text-teal-600">
+                  <Wallet className="w-4 h-4" />
+                </span>
+              </div>
+              <p className="text-xl font-extrabold font-mono text-teal-600 dark:text-teal-400">
+                {profile.currencySymbol}{wasalTotalReceived.toLocaleString('en-PK')}
+              </p>
+              <span className="text-[11px] text-slate-500 font-mono block">
+                {filteredWasalSettlements.length} Settlement Receipt(s) Recorded
+              </span>
+            </div>
+
+            {/* 4. Due to WASAL Delivery / Balance Due */}
+            <div className="bg-white dark:bg-slate-900 border border-amber-200 dark:border-amber-900/60 rounded-2xl p-4 shadow-2xs space-y-1">
+              <div className="flex items-center justify-between text-xs text-slate-500">
+                <span className="font-bold text-amber-700 dark:text-amber-400">
+                  4. Due to WASAL Delivery (بقایا حساب)
+                </span>
+                <span className="p-1.5 rounded-lg bg-amber-50 dark:bg-amber-950/60 text-amber-600">
+                  <DollarSign className="w-4 h-4" />
+                </span>
+              </div>
+              <p
+                className={`text-xl font-extrabold font-mono ${
+                  wasalDueBalance > 0
+                    ? 'text-amber-600 dark:text-amber-400'
+                    : wasalDueBalance < 0
+                    ? 'text-blue-600 dark:text-blue-400'
+                    : 'text-emerald-600 dark:text-emerald-400'
+                }`}
+              >
+                {profile.currencySymbol}{Math.abs(wasalDueBalance).toLocaleString('en-PK')}
+              </p>
+              <span className="text-[11px] text-slate-500 font-mono block">
+                {wasalDueBalance > 0
+                  ? 'Delivered COD Pending Remittance from WASAL'
+                  : wasalDueBalance < 0
+                  ? 'Over-settled / Balance Payable to WASAL'
+                  : 'Account Settled & Clear'}
+              </span>
+            </div>
+          </div>
+
+          {/* WASAL Orders Separation Daybook Table */}
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden shadow-2xs">
+            <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex flex-wrap items-center justify-between gap-2">
+              <h3 className="text-sm font-black text-slate-900 dark:text-white">
+                WASAL Delivery Orders Daybook ({filteredWasalOrders.length})
+              </h3>
+              <span className="text-[11px] text-slate-500 font-mono">
+                {wasalDateFilter ? `Date: ${wasalDateFilter}` : 'Showing All Dates'}
+              </span>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs text-left">
+                <thead className="bg-slate-50 dark:bg-slate-800/80 border-b border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 uppercase text-[10px]">
+                  <tr>
+                    <th className="py-2.5 px-3">Date</th>
+                    <th className="py-2.5 px-3">Order # / Tracking</th>
+                    <th className="py-2.5 px-3">Customer &amp; City</th>
+                    <th className="py-2.5 px-3 text-center">Status</th>
+                    <th className="py-2.5 px-3 text-right">Subtotal</th>
+                    <th className="py-2.5 px-3 text-right">Delivery Fee</th>
+                    <th className="py-2.5 px-3 text-right">Order Amount</th>
+                    <th className="py-2.5 px-3 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                  {filteredWasalOrders.length === 0 ? (
+                    <tr>
+                      <td colSpan={8} className="py-10 text-center text-slate-400">
+                        No WASAL delivery orders found for the selected filter.
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredWasalOrders.map((ord) => (
+                      <tr key={ord.id} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40">
+                        <td className="py-2.5 px-3 font-mono text-[11px] text-slate-600 dark:text-slate-300">
+                          {ord.createdAt.split('T')[0]}
+                        </td>
+                        <td className="py-2.5 px-3">
+                          <span className="font-mono font-bold text-slate-900 dark:text-white block">
+                            #{ord.orderNumber}
+                          </span>
+                          <span className="font-mono text-[10px] text-blue-600 dark:text-blue-400">
+                            {ord.trackingNumber || 'WSL-PENDING'}
+                          </span>
+                        </td>
+                        <td className="py-2.5 px-3">
+                          <span className="font-bold text-slate-900 dark:text-white block">
+                            {ord.customerName}
+                          </span>
+                          <span className="text-[10px] text-slate-500">
+                            {ord.city} · {ord.phone}
+                          </span>
+                        </td>
+                        <td className="py-2.5 px-3 text-center">
+                          <span
+                            className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase ${
+                              ord.status === 'delivered'
+                                ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
+                                : ord.status === 'dispatched'
+                                ? 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300'
+                                : ord.status === 'returned'
+                                ? 'bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300'
+                                : 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300'
+                            }`}
+                          >
+                            {ord.status}
+                          </span>
+                        </td>
+                        <td className="py-2.5 px-3 text-right font-mono">
+                          {profile.currencySymbol}{ord.subtotal.toLocaleString('en-PK')}
+                        </td>
+                        <td className="py-2.5 px-3 text-right font-mono text-slate-500">
+                          {profile.currencySymbol}{ord.deliveryFee.toLocaleString('en-PK')}
+                        </td>
+                        <td className="py-2.5 px-3 text-right font-mono font-bold text-slate-900 dark:text-white">
+                          {profile.currencySymbol}{ord.totalAmount.toLocaleString('en-PK')}
+                        </td>
+                        <td className="py-2.5 px-3 text-right whitespace-nowrap space-x-1">
+                          {ord.status === 'pending' && (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                onUpdateOrderStatus(ord.id, 'dispatched', {
+                                  courierPartner: 'WASAL delivery',
+                                  trackingNumber: ord.trackingNumber || `WSL-${Math.floor(100000 + Math.random() * 900000)}`,
+                                })
+                              }
+                              className="px-2 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded text-[10px] font-bold cursor-pointer"
+                            >
+                              Dispatch
+                            </button>
+                          )}
+                          {ord.status === 'dispatched' && (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => onUpdateOrderStatus(ord.id, 'delivered')}
+                                className="px-2 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded text-[10px] font-bold cursor-pointer"
+                              >
+                                Mark Delivered
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => onUpdateOrderStatus(ord.id, 'returned')}
+                                className="px-2 py-1 bg-red-100 text-red-700 hover:bg-red-200 rounded text-[10px] font-bold cursor-pointer"
+                              >
+                                Return
+                              </button>
+                            </>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => setSelectedOrderForPrint(ord)}
+                            className="px-2 py-1 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 rounded text-[10px] font-bold cursor-pointer"
+                          >
+                            Slip
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+                {filteredWasalOrders.length > 0 && (
+                  <tfoot className="bg-slate-50 dark:bg-slate-800/70 border-t border-slate-200 dark:border-slate-700 font-bold text-xs">
+                    <tr>
+                      <td colSpan={4} className="py-2.5 px-3 text-slate-700 dark:text-slate-200">
+                        Totals ({filteredWasalOrders.length} WASAL orders): Dispatched {profile.currencySymbol}{wasalDispatchedAmount.toLocaleString('en-PK')} · Delivered {profile.currencySymbol}{wasalDeliveredAmount.toLocaleString('en-PK')}
+                      </td>
+                      <td className="py-2.5 px-3 text-right font-mono">
+                        {profile.currencySymbol}
+                        {filteredWasalOrders.reduce((s, o) => s + o.subtotal, 0).toLocaleString('en-PK')}
+                      </td>
+                      <td className="py-2.5 px-3 text-right font-mono">
+                        {profile.currencySymbol}
+                        {filteredWasalOrders.reduce((s, o) => s + o.deliveryFee, 0).toLocaleString('en-PK')}
+                      </td>
+                      <td className="py-2.5 px-3 text-right font-mono text-emerald-700 dark:text-emerald-400">
+                        {profile.currencySymbol}
+                        {filteredWasalOrders.reduce((s, o) => s + o.totalAmount, 0).toLocaleString('en-PK')}
+                      </td>
+                      <td className="py-2.5 px-3"></td>
+                    </tr>
+                  </tfoot>
+                )}
+              </table>
+            </div>
+          </div>
+
+          {/* WASAL Settlements / Amount Received Ledger */}
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl overflow-hidden shadow-2xs">
+            <div className="p-4 border-b border-slate-100 dark:border-slate-800 flex items-center justify-between">
+              <div>
+                <h3 className="text-sm font-black text-slate-900 dark:text-white">
+                  Amount Received for WASAL Delivery Ledger (وصول شدہ رقم کھاتہ)
+                </h3>
+                <p className="text-[11px] text-slate-500">
+                  Cash / Bank / Wallet remittances received against delivered WASAL COD parcels.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsSettlementModalOpen(true)}
+                className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-lg cursor-pointer"
+              >
+                + Record Receipt
+              </button>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs text-left">
+                <thead className="bg-slate-50 dark:bg-slate-800/80 border-b border-slate-200 dark:border-slate-800 text-slate-500 dark:text-slate-400 uppercase text-[10px]">
+                  <tr>
+                    <th className="py-2.5 px-3">Date</th>
+                    <th className="py-2.5 px-3">Payment Mode</th>
+                    <th className="py-2.5 px-3">Reference</th>
+                    <th className="py-2.5 px-3">Notes</th>
+                    <th className="py-2.5 px-3 text-right">Amount Received</th>
+                    <th className="py-2.5 px-3 text-right">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
+                  {filteredWasalSettlements.length === 0 ? (
+                    <tr>
+                      <td colSpan={6} className="py-8 text-center text-slate-400">
+                        No WASAL settlement receipts recorded yet. Click "+ Record Receipt" to log cash/bank received.
+                      </td>
+                    </tr>
+                  ) : (
+                    filteredWasalSettlements.map((s) => (
+                      <tr key={s.id} className="hover:bg-slate-50/70 dark:hover:bg-slate-800/40">
+                        <td className="py-2.5 px-3 font-mono">{s.date}</td>
+                        <td className="py-2.5 px-3 uppercase font-bold text-[11px]">{s.paymentMode}</td>
+                        <td className="py-2.5 px-3 font-mono text-slate-600 dark:text-slate-300">
+                          {s.reference || '-'}
+                        </td>
+                        <td className="py-2.5 px-3 text-slate-600 dark:text-slate-300">
+                          {s.notes || 'WASAL COD settlement'}
+                        </td>
+                        <td className="py-2.5 px-3 text-right font-mono font-bold text-teal-600 dark:text-teal-400">
+                          {profile.currencySymbol}{s.amount.toLocaleString('en-PK')}
+                        </td>
+                        <td className="py-2.5 px-3 text-right">
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteWasalSettlement(s.id)}
+                            className="p-1 text-red-500 hover:bg-red-50 dark:hover:bg-red-950/40 rounded cursor-pointer"
+                            title="Delete Receipt"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {viewModeTab === 'all_cod' && (
+      <>
       {/* 1. TOP SUMMARY METRICS */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Total Collected Net Cash */}
@@ -488,6 +1015,8 @@ export const CODOrdersView: React.FC<CODOrdersViewProps> = ({
           })
         )}
       </div>
+      </>
+      )}
 
       {/* 4. MODAL: BOOK NEW COD PARCEL */}
       {isAddOrderOpen && (
@@ -539,14 +1068,18 @@ export const CODOrdersView: React.FC<CODOrdersViewProps> = ({
                   <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">
                     City (شہر)
                   </label>
-                  <input
-                    type="text"
+                  <select
                     value={newCity}
                     onChange={(e) => setNewCity(e.target.value)}
-                    placeholder="Lahore / Karachi / Rawalpindi"
                     className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
                     required
-                  />
+                  >
+                    {allowedCities.map((c) => (
+                      <option key={c.name} value={c.name}>
+                        {c.name}
+                      </option>
+                    ))}
+                  </select>
                 </div>
               </div>
 
@@ -768,6 +1301,120 @@ export const CODOrdersView: React.FC<CODOrdersViewProps> = ({
                 <span>Print Slip Now</span>
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* 6. MODAL: RECORD WASAL SETTLEMENT AMOUNT RECEIVED */}
+      {isSettlementModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur-xs p-4">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl w-full max-w-md overflow-hidden shadow-2xl">
+            <div className="bg-emerald-600 text-white p-4 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Wallet className="w-5 h-5" />
+                <h3 className="text-sm font-black">Record Amount Received for WASAL Delivery</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsSettlementModalOpen(false)}
+                className="p-1 hover:bg-emerald-700 rounded-lg cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleRecordWasalSettlement} className="p-5 space-y-3 text-xs">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">
+                    Receipt Date
+                  </label>
+                  <input
+                    type="date"
+                    value={settlementDate}
+                    onChange={(e) => setSettlementDate(e.target.value)}
+                    className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-mono"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">
+                    Amount Received ({profile.currencySymbol})
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    step="any"
+                    value={settlementAmount}
+                    onChange={(e) => setSettlementAmount(e.target.value)}
+                    placeholder="e.g. 5000"
+                    className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-mono"
+                    required
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">
+                    Payment Mode
+                  </label>
+                  <select
+                    value={settlementMode}
+                    onChange={(e) => setSettlementMode(e.target.value as PaymentMode)}
+                    className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
+                  >
+                    <option value="bank_transfer">Bank Transfer</option>
+                    <option value="cash">Cash Settlement</option>
+                    <option value="easypaisa">EasyPaisa</option>
+                    <option value="jazzcash">JazzCash</option>
+                    <option value="sadapay">SadaPay</option>
+                    <option value="cod">COD Adjustment</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">
+                    Reference / Slip #
+                  </label>
+                  <input
+                    type="text"
+                    value={settlementRef}
+                    onChange={(e) => setSettlementRef(e.target.value)}
+                    placeholder="e.g. TXN-98412"
+                    className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-mono"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">
+                  Notes / Remarks
+                </label>
+                <input
+                  type="text"
+                  value={settlementNotes}
+                  onChange={(e) => setSettlementNotes(e.target.value)}
+                  placeholder="WASAL weekly COD remittance batch..."
+                  className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
+                />
+              </div>
+
+              <div className="pt-3 border-t border-slate-200 dark:border-slate-800 flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsSettlementModalOpen(false)}
+                  className="px-4 py-2 text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-black rounded-xl shadow-xs cursor-pointer"
+                >
+                  Save Settlement
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

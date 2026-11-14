@@ -304,8 +304,8 @@ export const Navbar: React.FC<NavbarProps> = ({
 
             {/* Right Header Actions */}
             <div className="flex items-center gap-1 sm:gap-2 shrink-0">
-              {/* VIEW MODE SWITCHER (Only shown to authenticated Super Admin) */}
-              {userRole === 'admin' && (
+              {/* VIEW MODE SWITCHER (Only shown to authenticated Super Admin / Admin) */}
+              {isAuthenticated && isSuperAdminOrAdmin && (
                 <div className="flex items-center bg-slate-100 dark:bg-slate-800 p-0.5 rounded-lg border border-slate-200 dark:border-slate-700">
                   <button
                     type="button"
@@ -418,8 +418,8 @@ export const Navbar: React.FC<NavbarProps> = ({
                 {darkMode ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
               </button>
 
-              {/* Record Entry Quick Trigger (Only for Admin in Merchant View) */}
-              {viewMode === 'merchant' && userRole === 'admin' && (
+              {/* Record Entry Quick Trigger (Only for Admin / Super Admin in Merchant View) */}
+              {isAuthenticated && viewMode === 'merchant' && isSuperAdminOrAdmin && (
                 <button
                   type="button"
                   onClick={() => onOpenAddTransaction()}

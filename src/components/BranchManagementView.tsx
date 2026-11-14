@@ -107,6 +107,7 @@ export const BranchManagementView: React.FC<BranchManagementViewProps> = ({
     canViewReports: true,
     canViewHistory: true,
     canAuthorizeDiscount: true,
+    canAuthorizeCreditSale: true,
     maxDiscountPercent: 10,
   });
 
@@ -238,18 +239,24 @@ export const BranchManagementView: React.FC<BranchManagementViewProps> = ({
       canViewReports: true,
       canViewHistory: true,
       canAuthorizeDiscount: true,
+      canAuthorizeCreditSale: manager.canAuthorizeCreditSale ?? false,
       maxDiscountPercent: 10,
     };
-    setManagerAuthoritiesForm(existing);
+    setManagerAuthoritiesForm({
+      ...existing,
+      canAuthorizeCreditSale:
+        existing.canAuthorizeCreditSale ?? manager.canAuthorizeCreditSale ?? false,
+    });
     setIsAuthoritiesModalOpen(true);
   };
 
   const handleSaveManagerAuthorities = () => {
     if (!selectedManager) return;
-    const updated = updateUserAccount(selectedManager.id, {
+    updateUserAccount(selectedManager.id, {
       managerAuthorities: managerAuthoritiesForm,
+      canAuthorizeCreditSale: Boolean(managerAuthoritiesForm.canAuthorizeCreditSale),
     });
-    setUsers(updated);
+    setUsers(getUserAccounts());
     setIsAuthoritiesModalOpen(false);
     alert(`Updated special authorities for manager ${selectedManager.fullName}.`);
   };
@@ -260,11 +267,11 @@ export const BranchManagementView: React.FC<BranchManagementViewProps> = ({
     if (!manager) return;
 
     // Update user account
-    const updatedUsers = updateUserAccount(managerId, {
+    updateUserAccount(managerId, {
       linkedBranchId: branchId || undefined,
       linkedBranchName: branch ? branch.name : undefined,
     });
-    setUsers(updatedUsers);
+    setUsers(getUserAccounts());
 
     // Update branch assigned manager
     if (branchId) {
@@ -802,6 +809,11 @@ export const BranchManagementView: React.FC<BranchManagementViewProps> = ({
                               Stock Edit
                             </span>
                           )}
+                          {(manager.canAuthorizeCreditSale || auths?.canAuthorizeCreditSale) && (
+                            <span className="px-1.5 py-0.5 bg-amber-50 text-amber-800 dark:bg-amber-950 dark:text-amber-300 rounded text-[10px] font-bold">
+                              Credit Seller
+                            </span>
+                          )}
                         </div>
                       </td>
 
@@ -833,15 +845,9 @@ export const BranchManagementView: React.FC<BranchManagementViewProps> = ({
                             <button
                               type="button"
                               onClick={() => {
-                                const newPin = prompt(
-                                  `Reset manager PIN for ${manager.fullName}. Default suggested: last 6 digits of mobile (${manager.phone.replace(/\D/g, '').slice(-6)})`,
-                                  manager.phone.replace(/\D/g, '').slice(-6)
-                                );
-                                if (newPin) {
-                                  resetUserPasswordToDefault(manager.id, newPin);
-                                  setUsers(getUserAccounts());
-                                  alert(`Password reset for ${manager.fullName} to: ${newPin}`);
-                                }
+                                const res = resetUserPasswordToDefault(manager.id);
+                                setUsers(getUserAccounts());
+                                alert(`Temporary default PIN reset for ${manager.fullName} to: ${res.tempPin} (user must change upon next login)`);
                               }}
                               className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
                               title="Reset Password"
@@ -1368,9 +1374,24 @@ export const BranchManagementView: React.FC<BranchManagementViewProps> = ({
               </label>
             </div>
 
-            {/* Discount Authorization Setting */}
-            <div className="p-3 bg-amber-50 dark:bg-amber-950/40 rounded-xl border border-amber-200 dark:border-amber-800 space-y-2 text-xs">
+            {/* Discount & Credit Sale Authorization Settings */}
+            <div className="p-3 bg-amber-50 dark:bg-amber-950/40 rounded-xl border border-amber-200 dark:border-amber-800 space-y-2.5 text-xs">
               <label className="flex items-center gap-2 font-bold text-amber-900 dark:text-amber-200 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={Boolean(managerAuthoritiesForm.canAuthorizeCreditSale)}
+                  onChange={(e) =>
+                    setManagerAuthoritiesForm({
+                      ...managerAuthoritiesForm,
+                      canAuthorizeCreditSale: e.target.checked,
+                    })
+                  }
+                  className="rounded text-amber-500"
+                />
+                <span>Authorize Seller Credit Sales (ادھار فروخت کی اجازت)</span>
+              </label>
+
+              <label className="flex items-center gap-2 font-bold text-amber-900 dark:text-amber-200 cursor-pointer pt-1 border-t border-amber-200/70 dark:border-amber-800/60">
                 <input
                   type="checkbox"
                   checked={managerAuthoritiesForm.canAuthorizeDiscount}

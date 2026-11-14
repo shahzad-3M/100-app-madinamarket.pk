@@ -40,13 +40,18 @@ export const ProductDetailsModal: React.FC<ProductDetailsModalProps> = ({
     ? [product.imageUrl]
     : [];
 
+  const getVariationLabel = (v: NonNullable<ProductItem['variations']>[number]) =>
+    [v.size, v.color, ...Object.values(v.attributes || {})].filter(Boolean).join(' · ') ||
+    v.sku ||
+    'Variant';
+
   const [activeImageIndex, setActiveImageIndex] = useState(0);
   const [selectedVariationIndex, setSelectedVariationIndex] = useState<number | null>(
     product.variations && product.variations.length > 0 ? 0 : null
   );
   const [selectedSize, setSelectedSize] = useState<string>(
     product.variations && product.variations.length > 0
-      ? product.variations[0].title
+      ? getVariationLabel(product.variations[0])
       : product.selectedSize || (product.sizes && product.sizes.length > 0 ? product.sizes[0] : 'Standard')
   );
   const [quantity, setQuantity] = useState(1);
@@ -57,17 +62,24 @@ export const ProductDetailsModal: React.FC<ProductDetailsModalProps> = ({
       ? product.variations[selectedVariationIndex]
       : null;
 
-  const activePrice = activeVariation?.ourPrice || product.ourPrice;
-  const activeMarketPrice = activeVariation?.marketPrice || product.marketPrice;
+  const activePrice = activeVariation?.salePrice || product.ourPrice;
+  const activeMarketPrice = activeVariation?.originalPrice || product.marketPrice;
 
   const activeImage =
-    (activeVariation?.imageUrl) || pictures[activeImageIndex] || product.imageUrl;
+    activeVariation?.image || pictures[activeImageIndex] || product.imageUrl;
 
   const savings = Math.max(0, activeMarketPrice - activePrice);
   const savingsPercent = activeMarketPrice > 0 ? Math.round((savings / activeMarketPrice) * 100) : 50;
 
   const handleAdd = () => {
-    onAddToCart(product, quantity, selectedSize);
+    const productWithVariant: ProductItem = {
+      ...product,
+      ourPrice: activePrice,
+      marketPrice: activeMarketPrice,
+      selectedSize,
+      imageUrl: activeImage || product.imageUrl,
+    };
+    onAddToCart(productWithVariant, quantity, selectedSize);
     setAddedAnimation(true);
     setTimeout(() => {
       setAddedAnimation(false);
@@ -237,13 +249,14 @@ export const ProductDetailsModal: React.FC<ProductDetailsModalProps> = ({
                   <div className="grid grid-cols-2 gap-2">
                     {product.variations.map((v, vIdx) => {
                       const isSelected = selectedVariationIndex === vIdx;
+                      const label = getVariationLabel(v);
                       return (
                         <button
                           key={v.id || vIdx}
                           type="button"
                           onClick={() => {
                             setSelectedVariationIndex(vIdx);
-                            setSelectedSize(v.title);
+                            setSelectedSize(label);
                           }}
                           className={`p-2 rounded-xl text-left border transition-all cursor-pointer flex items-center gap-2 ${
                             isSelected
@@ -251,15 +264,15 @@ export const ProductDetailsModal: React.FC<ProductDetailsModalProps> = ({
                               : 'border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 hover:border-slate-300'
                           }`}
                         >
-                          {v.imageUrl && (
-                            <img src={v.imageUrl} alt={v.title} className="w-8 h-8 rounded-lg object-cover shrink-0" />
+                          {v.image && (
+                            <img src={v.image} alt={label} className="w-8 h-8 rounded-lg object-cover shrink-0" />
                           )}
                           <div className="min-w-0 flex-1">
                             <span className="text-xs font-bold text-slate-900 dark:text-white block truncate">
-                              {v.title}
+                              {label}
                             </span>
                             <span className="text-[10px] text-amber-600 dark:text-amber-400 font-mono font-bold block">
-                              {profile.currencySymbol}{(v.ourPrice || product.ourPrice).toLocaleString('en-PK')}
+                              {profile.currencySymbol}{(v.salePrice || product.ourPrice).toLocaleString('en-PK')}
                             </span>
                           </div>
                         </button>
@@ -354,7 +367,7 @@ export const ProductDetailsModal: React.FC<ProductDetailsModalProps> = ({
                         ) : (
                           <>
                             <ShoppingBag className="w-4 h-4" />
-                            <span>Add to Cart ({profile.currencySymbol}{(product.ourPrice * quantity).toLocaleString('en-PK')})</span>
+                            <span>Add to Cart ({profile.currencySymbol}{(activePrice * quantity).toLocaleString('en-PK')})</span>
                           </>
                         )}
                       </button>

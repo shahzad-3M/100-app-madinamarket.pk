@@ -7,6 +7,7 @@ import {
   CODOrder,
   CommissionRecord,
   Customer,
+  DeliveryCityConfig,
   Employee,
   Investor,
   InvestorTransaction,
@@ -27,8 +28,27 @@ import {
   UserAccount,
   WalkInCustomer,
   WalkInSale,
+  WasalSettlement,
   WhatsAppNotification,
 } from '../types';
+
+export const defaultDeliveryCities: DeliveryCityConfig[] = [
+  { name: 'Muzaffarabad', allowed: true },
+  { name: 'Mirpur (AJK)', allowed: true },
+  { name: 'Rawalpindi', allowed: true },
+  { name: 'Islamabad', allowed: true },
+  { name: 'Lahore', allowed: true },
+  { name: 'Karachi', allowed: true },
+  { name: 'Faisalabad', allowed: true },
+  { name: 'Multan', allowed: true },
+  { name: 'Gujranwala', allowed: true },
+  { name: 'Sialkot', allowed: true },
+  { name: 'Peshawar', allowed: true },
+  { name: 'Abbottabad', allowed: true },
+  { name: 'Quetta', allowed: true },
+  { name: 'Bahawalpur', allowed: true },
+  { name: 'Sargodha', allowed: true },
+];
 
 export const defaultLoginFormConfig: LoginFormConfig = {
   title: 'Sign In to 100DAGAR',
@@ -94,6 +114,7 @@ export const defaultBusinessProfile: BusinessProfile = {
     enabled: true,
     autoSync: true,
   },
+  deliveryCities: defaultDeliveryCities,
   adminPin: '580987', // USER DIRECTIVE: Owner default pin is 580987 and resettable in backend
 };
 
@@ -548,6 +569,8 @@ export const defaultCODOrders: CODOrder[] = [
   },
 ];
 
+export const defaultWasalSettlements: WasalSettlement[] = [];
+
 // HR EMPLOYEES DEFAULT DATA
 export const defaultEmployees: Employee[] = [
   {
@@ -724,13 +747,13 @@ export const defaultReviewRewards: ReviewRewardSubmission[] = [
 export const defaultLoginAuditLogs: LoginAuditRecord[] = [
   {
     id: 'log_1',
-    userName: 'Al-Haj Muhammad Asif',
+    userName: 'Shahzad Malik',
     phone: '03125256266',
     role: 'super_admin',
     timestamp: '2026-03-02T09:15:00Z',
     status: 'success',
     ipOrDevice: 'Main Office Terminal (Lahore)',
-    notes: 'Super Admin Master Login verified with PIN',
+    notes: 'Super Admin Master Login verified',
     usedPin: '••••••',
   },
   {
@@ -789,6 +812,8 @@ export const defaultInvestors: Investor[] = [
     profitShareType: 'percentage',
     profitShareValue: 35, // 35% net profit split
     assignedProductIds: ['prod_1'],
+    productAllocations: [{ productId: 'prod_1', unitsOwned: 80, investedAmount: 500000 }],
+    isReseller: false,
     status: 'active',
     settledProfit: 10850,
     notes: 'Funded import lot for 5-in-1 Hot Air Stylers (35% net profit share).',
@@ -806,6 +831,8 @@ export const defaultInvestors: Investor[] = [
     profitShareType: 'fixed_per_unit',
     profitShareValue: 200, // Rs. 200 per unit sold
     assignedProductIds: ['prod_2'],
+    productAllocations: [{ productId: 'prod_2', unitsOwned: 100, investedAmount: 1000000 }],
+    isReseller: false,
     status: 'active',
     settledProfit: 0,
     notes: 'Seed investor for upcoming AMOLED Smartwatch lot.',
@@ -861,20 +888,20 @@ export const defaultUserAccounts: UserAccount[] = [
   {
     id: 'usr_superadmin',
     username: 'admin',
-    fullName: 'Al-Haj Muhammad Asif',
-    urduName: 'الحاج محمد آصف (اسٹور مالک)',
+    fullName: 'Shahzad Malik',
+    urduName: 'شہزاد ملک (سپر ایڈمن)',
     phone: '03125256266',
-    email: 'owner@100dagar.pk',
+    email: 'admin@madinamarket.pk',
     role: 'super_admin',
     status: 'active',
+    canAuthorizeCreditSale: true,
     passwordHash: '580987', // Legacy PIN supported, seamlessly salted on password change
-    suggestedDefaultPin: '580987',
     createdAt: '2026-01-01',
     lastLoginAt: '2026-03-02T09:15:00Z',
     loginCount: 142,
   },
   {
-    id: 'usr_manager_1',
+    id: 'usr_manager_bilal',
     username: 'bilal_manager',
     fullName: 'Bilal Ahmed',
     urduName: 'بلال احمد (سٹور مینیجر)',
@@ -882,6 +909,7 @@ export const defaultUserAccounts: UserAccount[] = [
     email: 'bilal@100dagar.pk',
     role: 'manager',
     status: 'active',
+    canAuthorizeCreditSale: true,
     passwordHash: '551234', // default: last 6 digits of 03215551234
     suggestedDefaultPin: '551234',
     createdAt: '2026-01-15',
@@ -897,6 +925,7 @@ export const defaultUserAccounts: UserAccount[] = [
     email: 'hamza@100dagar.pk',
     role: 'staff',
     status: 'active',
+    canAuthorizeCreditSale: false,
     passwordHash: '667890', // default: last 6 digits of 03456667890
     suggestedDefaultPin: '667890',
     createdAt: '2026-02-01',
@@ -959,6 +988,7 @@ export const defaultUserAccounts: UserAccount[] = [
     linkedBranchId: 'branch_1',
     linkedBranchName: 'Shah Alam Head Office & Main Wholesale Branch',
     status: 'active',
+    canAuthorizeCreditSale: true,
     passwordHash: '526266', // default: last 6 digits of 03125256266
     suggestedDefaultPin: '526266',
     createdAt: '2026-01-01',
@@ -975,6 +1005,7 @@ export const defaultUserAccounts: UserAccount[] = [
     linkedBranchId: 'branch_2',
     linkedBranchName: 'Hall Road Electronics & Gadgets Branch',
     status: 'active',
+    canAuthorizeCreditSale: false,
     passwordHash: '234567',
     suggestedDefaultPin: '234567',
     createdAt: '2026-01-15',
@@ -991,6 +1022,7 @@ export const defaultUserAccounts: UserAccount[] = [
     linkedBranchId: 'branch_3',
     linkedBranchName: 'Raja Bazaar Wholesale & Trading Branch',
     status: 'active',
+    canAuthorizeCreditSale: true,
     passwordHash: '876543',
     suggestedDefaultPin: '876543',
     createdAt: '2026-02-01',
@@ -1014,6 +1046,7 @@ export const defaultManagerAuthorities: ManagerAuthorities = {
   canViewReports: true,
   canViewHistory: true,
   canAuthorizeDiscount: true,
+  canAuthorizeCreditSale: true,
   maxDiscountPercent: 10,
 };
 

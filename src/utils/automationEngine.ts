@@ -171,9 +171,16 @@ export function generatePaymentTermsAlertsBatch(
   const todayObj = new Date(targetDate);
   todayObj.setHours(0, 0, 0, 0);
 
-  // Group by customer or scan credit transactions with due balance
+  // Group by customer or scan credit transactions with due balance (exclude COD & fully paid sales)
   transactions
-    .filter((tx) => tx.type === 'credit' && (tx.dueBalance === undefined || tx.dueBalance > 0) && tx.dueDate)
+    .filter(
+      (tx) =>
+        tx.type === 'credit' &&
+        (tx.dueBalance === undefined ? tx.amount > 0 : tx.dueBalance > 0) &&
+        Boolean(tx.dueDate) &&
+        tx.saleType !== 'cod' &&
+        tx.saleType !== 'full'
+    )
     .forEach((tx) => {
       const customer = customerMap.get(tx.customerId);
       if (!customer || customer.status !== 'active') return;
@@ -187,7 +194,15 @@ export function generatePaymentTermsAlertsBatch(
       const unpaidAmount = tx.dueBalance !== undefined ? tx.dueBalance : tx.amount;
       if (unpaidAmount <= 0) return;
 
-      // Condition 1: Exactly 3 days before payment terms day (or between 3 and 1 days before if not yet notified)
+      const maxGraceStr =
+        tx.maxGraceDate ||
+        (() => {
+          const g = new Date(tx.dueDate!);
+          g.setDate(g.getDate() + 7);
+          return g.toISOString().split('T')[0];
+        })();
+
+      // Condition 1: Soft reminder before 3 days
       if (diffDays === 3) {
         const msg = formatTemplateMessage(softTpl.content, {
           customerName: customer.name + (customer.urduName ? ` (${customer.urduName})` : ''),
@@ -196,7 +211,7 @@ export function generatePaymentTermsAlertsBatch(
           dueDate: tx.dueDate,
           businessName: profile.name,
           paymentChannelsText,
-          paymentTerms: tx.paymentTermsDays || customer.paymentTermsDays || 14,
+          paymentTerms: tx.paymentTermsDays || customer.paymentTermsDays || 7,
           invoiceNo: tx.invoiceNumber,
         });
 
@@ -211,11 +226,11 @@ export function generatePaymentTermsAlertsBatch(
           type: 'pre_due_soft',
           status: 'pending',
           messageText: msg,
-          notes: `Soft reminder: Payment of Rs. ${unpaidAmount.toLocaleString('en-PK')} due in 3 days (${tx.dueDate})`,
+          notes: `Soft reminder (3 days before due): Rs. ${unpaidAmount.toLocaleString('en-PK')} due on ${tx.dueDate}`,
           createdAt: new Date().toISOString(),
         });
       }
-      // Condition 2: Due Date Alert (On the exact payment terms day)
+      // Condition 2: Due Date Payment Alert (1 week max grace)
       else if (diffDays === 0) {
         const msg = formatTemplateMessage(dueTodayTpl.content, {
           customerName: customer.name + (customer.urduName ? ` (${customer.urduName})` : ''),
@@ -224,7 +239,7 @@ export function generatePaymentTermsAlertsBatch(
           dueDate: tx.dueDate,
           businessName: profile.name,
           paymentChannelsText,
-          paymentTerms: tx.paymentTermsDays || customer.paymentTermsDays || 14,
+          paymentTerms: tx.paymentTermsDays || customer.paymentTermsDays || 7,
           invoiceNo: tx.invoiceNumber,
         });
 
@@ -239,15 +254,14 @@ export function generatePaymentTermsAlertsBatch(
           type: 'due_date',
           status: 'pending',
           messageText: msg,
-          notes: `Due Date Alert: Invoice #${tx.invoiceNumber || 'INV'} due today! Max 1 week payment grace.`,
+          notes: `Due Date Alert: Invoice #${tx.invoiceNumber || 'INV'} due today! 1 week max grace ends ${maxGraceStr}.`,
           createdAt: new Date().toISOString(),
         });
       }
-      // Condition 3: Overdue - Every 3 days after overdue day until payment is settled
+      // Condition 3: Overdue reminder every 3 days until settled
       else if (diffDays < 0) {
         const daysOverdue = Math.abs(diffDays);
-        // Alert every 3 days: 3, 6, 9, 12, 15...
-        if (daysOverdue % 3 === 0 || daysOverdue === 1) {
+        if (daysOverdue > 0 && daysOverdue % 3 === 0) {
           const msg = formatTemplateMessage(overdue3DaysTpl.content, {
             customerName: customer.name + (customer.urduName ? ` (${customer.urduName})` : ''),
             amount: unpaidAmount,
@@ -256,7 +270,7 @@ export function generatePaymentTermsAlertsBatch(
             daysOverdue,
             businessName: profile.name,
             paymentChannelsText,
-            paymentTerms: tx.paymentTermsDays || customer.paymentTermsDays || 14,
+            paymentTerms: tx.paymentTermsDays || customer.paymentTermsDays || 7,
             invoiceNo: tx.invoiceNumber,
           });
 
@@ -272,7 +286,7 @@ export function generatePaymentTermsAlertsBatch(
             type: 'overdue_3days',
             status: 'pending',
             messageText: msg,
-            notes: `Overdue cycle alert: ${daysOverdue} days overdue (every 3 days cycle until settled)`,
+            notes: `Overdue reminder (every 3 days until settled): ${daysOverdue} days overdue (grace end ${maxGraceStr})`,
             createdAt: new Date().toISOString(),
           });
         }

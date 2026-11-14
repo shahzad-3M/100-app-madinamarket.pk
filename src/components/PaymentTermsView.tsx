@@ -47,8 +47,14 @@ export const PaymentTermsView: React.FC<PaymentTermsViewProps> = ({
   const todayObj = new Date(todayStr);
   todayObj.setHours(0, 0, 0, 0);
 
-  // Filter credit transactions with terms
-  const creditTxs = transactions.filter((t) => t.type === 'credit' && t.dueDate);
+  // Filter credit transactions with terms (exclude COD and fully paid direct orders)
+  const creditTxs = transactions.filter(
+    (t) =>
+      t.type === 'credit' &&
+      Boolean(t.dueDate) &&
+      t.saleType !== 'cod' &&
+      t.saleType !== 'full'
+  );
 
   // Classify each transaction into its payment terms lifecycle stage
   const classifiedTxs = creditTxs.map((tx) => {
@@ -432,7 +438,14 @@ export const PaymentTermsView: React.FC<PaymentTermsViewProps> = ({
                         <span>{tx.dueDate}</span>
                       </div>
                       <span className="text-[10px] text-slate-400 block">
-                        Max 1 Wk Grace
+                        Grace ends:{' '}
+                        {tx.maxGraceDate ||
+                          (() => {
+                            const g = new Date(tx.dueDate!);
+                            g.setDate(g.getDate() + 7);
+                            return g.toISOString().split('T')[0];
+                          })()}{' '}
+                        (1 Wk Max)
                       </span>
                     </td>
 

@@ -22,6 +22,7 @@ import {
   History,
   Settings,
   Sparkles,
+  Edit3,
 } from 'lucide-react';
 import { LoginFormConfig, LoginAuditRecord, UserAccount, UserRole } from '../types';
 import {
@@ -60,12 +61,21 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
   const [editingUser, setEditingUser] = useState<UserAccount | null>(null);
   const [notification, setNotification] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
+  // Edit user form state
+  const [editFullName, setEditFullName] = useState('');
+  const [editUsername, setEditUsername] = useState('');
+  const [editPhone, setEditPhone] = useState('');
+  const [editEmail, setEditEmail] = useState('');
+  const [editRole, setEditRole] = useState<UserRole>('customer');
+  const [editCreditAuth, setEditCreditAuth] = useState(false);
+
   // New user form state
   const [newUsername, setNewUsername] = useState('');
   const [newFullName, setNewFullName] = useState('');
   const [newPhone, setNewPhone] = useState('');
   const [newEmail, setNewEmail] = useState('');
   const [newRole, setNewRole] = useState<UserRole>('customer');
+  const [newCreditAuth, setNewCreditAuth] = useState(false);
   const [customPassword, setCustomPassword] = useState('');
   const [useDefaultMobilePin, setUseDefaultMobilePin] = useState(true);
 
@@ -118,6 +128,9 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
 
     const passRecord = await createPasswordRecord(initialPin);
 
+    const isSellerRole = newRole === 'super_admin' || newRole === 'admin' || newRole === 'manager' || newRole === 'staff';
+    const allowCredit = newRole === 'super_admin' || newRole === 'admin' || (isSellerRole && newCreditAuth);
+
     const created = createUserAccount({
       username: cleanUsername,
       fullName: newFullName.trim() || `User ${cleanUsername}`,
@@ -125,6 +138,7 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
       email: newEmail.trim() || undefined,
       role: newRole,
       status: 'active',
+      canAuthorizeCreditSale: allowCredit,
       passwordHash: passRecord.hash,
       passwordSalt: passRecord.salt,
       mustChangePassword: true,
@@ -137,6 +151,7 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
     setNewFullName('');
     setNewPhone('');
     setNewEmail('');
+    setNewCreditAuth(false);
     setCustomPassword('');
     refreshData();
 
@@ -146,6 +161,13 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
 
   // Handle Admin Reset Password to Default Mobile PIN
   const handleResetPassword = (user: UserAccount) => {
+    if (user.role === 'super_admin') {
+      showNotification(
+        'error',
+        'Super Admin does not use a suggested default PIN. Change Master PIN securely inside My Account or Settings.'
+      );
+      return;
+    }
     const result = resetUserPasswordToDefault(user.id);
     refreshData();
     if (result.account) {
@@ -154,12 +176,86 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
     }
   };
 
+  // Open Edit User Modal
+  const openEditUserModal = (user: UserAccount) => {
+    setEditingUser(user);
+    setEditFullName(user.fullName);
+    setEditUsername(user.username);
+    setEditPhone(user.phone);
+    setEditEmail(user.email || '');
+    setEditRole(user.role);
+    setEditCreditAuth(Boolean(user.canAuthorizeCreditSale ?? user.managerAuthorities?.canAuthorizeCreditSale));
+  };
+
+  // Save Edited User Details
+  const handleSaveEditUser = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingUser) return;
+    const cleanPhone = editPhone.trim().replace(/[\s-]/g, '');
+    const cleanUsername = editUsername.trim().toLowerCase();
+
+    if (!cleanPhone || !editFullName.trim() || !cleanUsername) {
+      showNotification('error', 'Full name, username, and phone number are required.');
+      return;
+    }
+
+    if (
+      users.some(
+        (u) => u.id !== editingUser.id && u.username.toLowerCase() === cleanUsername
+      )
+    ) {
+      showNotification('error', `Username '${cleanUsername}' is already used by another account.`);
+      return;
+    }
+
+    const effectiveRole = editingUser.role === 'super_admin' ? 'super_admin' : editRole;
+    const allowCredit =
+      effectiveRole === 'super_admin' ||
+      effectiveRole === 'admin' ||
+      ((effectiveRole === 'manager' || effectiveRole === 'staff') && editCreditAuth);
+
+    updateUserAccount(editingUser.id, {
+      fullName: editFullName.trim(),
+      username: cleanUsername,
+      phone: cleanPhone,
+      email: editEmail.trim() || undefined,
+      role: effectiveRole,
+      canAuthorizeCreditSale: allowCredit,
+      managerAuthorities: editingUser.managerAuthorities
+        ? { ...editingUser.managerAuthorities, canAuthorizeCreditSale: allowCredit }
+        : undefined,
+    });
+
+    setEditingUser(null);
+    refreshData();
+    if (onRefreshSession) onRefreshSession();
+    showNotification('success', `User '${editFullName.trim()}' updated successfully.`);
+  };
+
   // Handle Toggle User Status
   const handleToggleStatus = (user: UserAccount) => {
     const newStatus = user.status === 'active' ? 'suspended' : 'active';
     updateUserAccount(user.id, { status: newStatus });
     refreshData();
     showNotification('success', `User '${user.fullName}' status changed to ${newStatus}.`);
+  };
+
+  // Handle Toggle Seller Credit Sale Authorization
+  const handleToggleCreditAuth = (user: UserAccount) => {
+    if (user.role !== 'manager' && user.role !== 'staff') return;
+    const currentVal = Boolean(user.canAuthorizeCreditSale ?? user.managerAuthorities?.canAuthorizeCreditSale);
+    const nextVal = !currentVal;
+    updateUserAccount(user.id, {
+      canAuthorizeCreditSale: nextVal,
+      managerAuthorities: user.managerAuthorities
+        ? { ...user.managerAuthorities, canAuthorizeCreditSale: nextVal }
+        : undefined,
+    });
+    refreshData();
+    showNotification(
+      'success',
+      `Credit Sale permission for '${user.fullName}' (${user.role}) ${nextVal ? 'ENABLED' : 'REVOKED'}.`
+    );
   };
 
   // Handle Save Login Config
@@ -340,25 +436,48 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
                         </td>
 
                         <td className="py-3 px-4">
-                          <span
-                            className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
-                              user.role === 'super_admin'
-                                ? 'bg-amber-100 text-amber-900 dark:bg-amber-950/60 dark:text-amber-300'
-                                : user.role === 'admin'
-                                ? 'bg-indigo-100 text-indigo-900 dark:bg-indigo-950/60 dark:text-indigo-300'
-                                : user.role === 'investor'
-                                ? 'bg-emerald-100 text-emerald-900 dark:bg-emerald-950/60 dark:text-emerald-300'
-                                : user.role === 'manager'
-                                ? 'bg-blue-100 text-blue-900 dark:bg-blue-950/60 dark:text-blue-300'
-                                : user.role === 'staff'
-                                ? 'bg-cyan-100 text-cyan-900 dark:bg-cyan-950/60 dark:text-cyan-300'
-                                : user.role === 'reseller'
-                                ? 'bg-teal-100 text-teal-900 dark:bg-teal-950/60 dark:text-teal-300'
-                                : 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300'
-                            }`}
-                          >
-                            {user.role.replace('_', ' ')}
-                          </span>
+                          <div className="flex flex-wrap items-center gap-1">
+                            <span
+                              className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
+                                user.role === 'super_admin'
+                                  ? 'bg-amber-100 text-amber-900 dark:bg-amber-950/60 dark:text-amber-300'
+                                  : user.role === 'admin'
+                                  ? 'bg-indigo-100 text-indigo-900 dark:bg-indigo-950/60 dark:text-indigo-300'
+                                  : user.role === 'investor'
+                                  ? 'bg-emerald-100 text-emerald-900 dark:bg-emerald-950/60 dark:text-emerald-300'
+                                  : user.role === 'manager'
+                                  ? 'bg-blue-100 text-blue-900 dark:bg-blue-950/60 dark:text-blue-300'
+                                  : user.role === 'staff'
+                                  ? 'bg-cyan-100 text-cyan-900 dark:bg-cyan-950/60 dark:text-cyan-300'
+                                  : user.role === 'reseller'
+                                  ? 'bg-teal-100 text-teal-900 dark:bg-teal-950/60 dark:text-teal-300'
+                                  : 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300'
+                              }`}
+                            >
+                              {user.role.replace('_', ' ')}
+                            </span>
+                            {(user.role === 'super_admin' || user.role === 'admin') && (
+                              <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/60 dark:text-emerald-300">
+                                Credit Auth
+                              </span>
+                            )}
+                            {(user.role === 'manager' || user.role === 'staff') && (
+                              <button
+                                type="button"
+                                onClick={() => handleToggleCreditAuth(user)}
+                                title="Click to grant or revoke Seller Credit Sale permission"
+                                className={`px-1.5 py-0.5 rounded text-[9px] font-bold cursor-pointer border transition-colors ${
+                                  user.canAuthorizeCreditSale || user.managerAuthorities?.canAuthorizeCreditSale
+                                    ? 'bg-emerald-50 text-emerald-700 border-emerald-300 dark:bg-emerald-950/50 dark:text-emerald-300 dark:border-emerald-800'
+                                    : 'bg-slate-50 text-slate-400 border-slate-200 dark:bg-slate-800 dark:text-slate-500 dark:border-slate-700 hover:border-amber-400'
+                                }`}
+                              >
+                                {user.canAuthorizeCreditSale || user.managerAuthorities?.canAuthorizeCreditSale
+                                  ? '✓ Credit Seller'
+                                  : '✗ No Credit'}
+                              </button>
+                            )}
+                          </div>
                         </td>
 
                         <td className="py-3 px-4">
@@ -399,30 +518,45 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
 
                         <td className="py-3 px-4 text-right">
                           <div className="flex items-center justify-end gap-1.5">
-                            {/* Reset Password Button */}
+                            {/* Edit User Button */}
                             <button
                               type="button"
-                              onClick={() => handleResetPassword(user)}
-                              className="px-2 py-1 text-[11px] font-bold text-amber-700 dark:text-amber-300 bg-amber-50 hover:bg-amber-100 dark:bg-amber-950/50 dark:hover:bg-amber-900/60 rounded border border-amber-300 dark:border-amber-800 transition-colors cursor-pointer flex items-center gap-1"
-                              title="Reset to temporary default PIN (last 6 digits of mobile)"
+                              onClick={() => openEditUserModal(user)}
+                              className="px-2 py-1 text-[11px] font-bold text-slate-700 dark:text-slate-200 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 rounded border border-slate-200 dark:border-slate-700 transition-colors cursor-pointer flex items-center gap-1"
+                              title="Edit user info"
                             >
-                              <RotateCcw className="w-3 h-3" />
-                              <span>Reset PIN</span>
+                              <Edit3 className="w-3 h-3" />
+                              <span>Edit</span>
                             </button>
 
+                            {/* Reset Password Button (Disabled/omitted for Super Admin so no suggested default PIN exists) */}
+                            {user.role !== 'super_admin' && (
+                              <button
+                                type="button"
+                                onClick={() => handleResetPassword(user)}
+                                className="px-2 py-1 text-[11px] font-bold text-amber-700 dark:text-amber-300 bg-amber-50 hover:bg-amber-100 dark:bg-amber-950/50 dark:hover:bg-amber-900/60 rounded border border-amber-300 dark:border-amber-800 transition-colors cursor-pointer flex items-center gap-1"
+                                title="Reset to temporary default PIN (last 6 digits of mobile)"
+                              >
+                                <RotateCcw className="w-3 h-3" />
+                                <span>Reset PIN</span>
+                              </button>
+                            )}
+
                             {/* Toggle Active / Suspended */}
-                            <button
-                              type="button"
-                              onClick={() => handleToggleStatus(user)}
-                              className={`p-1 rounded transition-colors cursor-pointer ${
-                                user.status === 'active'
-                                  ? 'text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30'
-                                  : 'text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/30'
-                              }`}
-                              title={user.status === 'active' ? 'Suspend Account' : 'Activate Account'}
-                            >
-                              {user.status === 'active' ? <UserX className="w-3.5 h-3.5" /> : <UserCheck className="w-3.5 h-3.5" />}
-                            </button>
+                            {user.role !== 'super_admin' && (
+                              <button
+                                type="button"
+                                onClick={() => handleToggleStatus(user)}
+                                className={`p-1 rounded transition-colors cursor-pointer ${
+                                  user.status === 'active'
+                                    ? 'text-slate-400 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-950/30'
+                                    : 'text-slate-400 hover:text-emerald-600 hover:bg-emerald-50 dark:hover:bg-emerald-950/30'
+                                }`}
+                                title={user.status === 'active' ? 'Suspend Account' : 'Activate Account'}
+                              >
+                                {user.status === 'active' ? <UserX className="w-3.5 h-3.5" /> : <UserCheck className="w-3.5 h-3.5" />}
+                              </button>
+                            )}
                           </div>
                         </td>
                       </tr>
@@ -747,6 +881,22 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
                 </div>
               </div>
 
+              {(newRole === 'manager' || newRole === 'staff') && (
+                <div className="p-2.5 bg-amber-50 dark:bg-amber-950/40 rounded-lg border border-amber-200 dark:border-amber-800">
+                  <label className="flex items-center gap-2 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={newCreditAuth}
+                      onChange={(e) => setNewCreditAuth(e.target.checked)}
+                      className="w-4 h-4 rounded text-amber-500"
+                    />
+                    <span className="text-xs font-bold text-amber-900 dark:text-amber-200">
+                      Authorize Seller Credit Sales (صرف مجاز سیلرز کو ادھار فروخت کی اجازت)
+                    </span>
+                  </label>
+                </div>
+              )}
+
               <div className="pt-2 border-t border-slate-100 dark:border-slate-800">
                 <label className="flex items-center gap-2 cursor-pointer select-none mb-2">
                   <input
@@ -844,6 +994,143 @@ export const UserManagementView: React.FC<UserManagementViewProps> = ({
             >
               Acknowledge &amp; Close / سمجھ آ گئی
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* EDIT USER MODAL */}
+      {editingUser && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/75 backdrop-blur-xs p-3 sm:p-4 overflow-y-auto">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl my-4 transition-colors">
+            <div className="bg-[#FFD200] p-4 flex items-center justify-between text-slate-900">
+              <div className="flex items-center gap-2">
+                <Edit3 className="w-4 h-4" />
+                <div>
+                  <h3 className="text-base font-black tracking-tight leading-tight">
+                    Edit User Account ({editingUser.role.replace('_', ' ').toUpperCase()})
+                  </h3>
+                  <span className="text-[11px] font-medium text-slate-800 block">
+                    صارف کی تفصیلات اور اجازتیں اپ ڈیٹ کریں
+                  </span>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setEditingUser(null)}
+                className="p-1.5 text-slate-800 hover:text-black rounded-lg hover:bg-amber-400/50 cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEditUser} className="p-5 sm:p-6 space-y-3.5">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                  Full Name:
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={editFullName}
+                  onChange={(e) => setEditFullName(e.target.value)}
+                  className="w-full px-3 py-2 text-xs rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-amber-400 focus:outline-hidden"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    Username:
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={editUsername}
+                    onChange={(e) => setEditUsername(e.target.value)}
+                    className="w-full px-3 py-2 text-xs font-mono rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-amber-400 focus:outline-hidden"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    Mobile Phone:
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={editPhone}
+                    onChange={(e) => setEditPhone(e.target.value)}
+                    className="w-full px-3 py-2 text-xs font-mono rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-amber-400 focus:outline-hidden"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    Email:
+                  </label>
+                  <input
+                    type="email"
+                    value={editEmail}
+                    onChange={(e) => setEditEmail(e.target.value)}
+                    className="w-full px-3 py-2 text-xs rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-amber-400 focus:outline-hidden"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+                    Role:
+                  </label>
+                  <select
+                    value={editRole}
+                    disabled={editingUser.role === 'super_admin'}
+                    onChange={(e) => setEditRole(e.target.value as UserRole)}
+                    className="w-full px-2.5 py-2 text-xs rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white disabled:opacity-60"
+                  >
+                    {editingUser.role === 'super_admin' && (
+                      <option value="super_admin">Super Admin</option>
+                    )}
+                    <option value="customer">Customer</option>
+                    <option value="investor">Investor</option>
+                    <option value="staff">Staff</option>
+                    <option value="manager">Manager</option>
+                    <option value="reseller">Reseller</option>
+                    <option value="admin">Administrator</option>
+                  </select>
+                </div>
+              </div>
+
+              {(editRole === 'manager' || editRole === 'staff') && (
+                <div className="p-2.5 bg-amber-50 dark:bg-amber-950/40 rounded-lg border border-amber-200 dark:border-amber-800">
+                  <label className="flex items-center gap-2 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={editCreditAuth}
+                      onChange={(e) => setEditCreditAuth(e.target.checked)}
+                      className="w-4 h-4 rounded text-amber-500"
+                    />
+                    <span className="text-xs font-bold text-amber-900 dark:text-amber-200">
+                      Authorize Seller Credit Sales
+                    </span>
+                  </label>
+                </div>
+              )}
+
+              <div className="flex justify-end gap-2 pt-3 border-t border-slate-200 dark:border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setEditingUser(null)}
+                  className="px-4 py-2 text-xs font-bold text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 bg-slate-900 hover:bg-slate-800 dark:bg-amber-500 dark:text-slate-950 dark:hover:bg-amber-400 text-white font-black text-xs rounded-lg cursor-pointer"
+                >
+                  Save Changes
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

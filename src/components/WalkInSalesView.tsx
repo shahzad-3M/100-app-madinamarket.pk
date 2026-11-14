@@ -119,6 +119,10 @@ export const WalkInSalesView: React.FC<WalkInSalesViewProps> = ({
   const managerAuth = currentUser.managerAuthorities;
   const canAuthorizeDiscount = managerAuth?.canAuthorizeDiscount ?? true;
   const maxDiscountPercent = managerAuth?.maxDiscountPercent ?? 15;
+  const isCreditAuthorizedSeller =
+    currentUser.role === 'super_admin' ||
+    currentUser.role === 'admin' ||
+    Boolean(currentUser.canAuthorizeCreditSale || managerAuth?.canAuthorizeCreditSale);
 
   // Cart Totals
   const subtotal = cart.reduce((acc, item) => acc + item.totalAmount, 0);
@@ -227,8 +231,15 @@ export const WalkInSalesView: React.FC<WalkInSalesViewProps> = ({
       }
     }
 
-    const paidAmount = paidAmountInput.trim() ? parseFloat(paidAmountInput) : netTotal;
+    const rawPaid = paidAmountInput.trim() ? parseFloat(paidAmountInput) : netTotal;
+    const paidAmount = isCreditAuthorizedSeller ? Math.max(0, Math.min(netTotal, rawPaid)) : netTotal;
     const dueAmount = Math.max(0, netTotal - paidAmount);
+
+    if (dueAmount > 0 && !isCreditAuthorizedSeller) {
+      alert('Only authorized sellers (with Credit Sale role permission) are allowed to process credit/due balances.');
+      return;
+    }
+
     const paymentStatus: 'completed' | 'partial' | 'pending' =
       dueAmount === 0 ? 'completed' : paidAmount > 0 ? 'partial' : 'pending';
 
@@ -868,15 +879,25 @@ export const WalkInSalesView: React.FC<WalkInSalesViewProps> = ({
                 </div>
 
                 <div className="pt-2">
-                  <label className="text-slate-500 block mb-1 text-[11px]">
-                    Amount Paid by Customer (Leave blank if fully settled)
-                  </label>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-slate-500 text-[11px]">
+                      {isCreditAuthorizedSeller
+                        ? 'Amount Paid by Customer (Leave blank if fully settled)'
+                        : 'Full Payment Required (Credit Sale Not Authorized for Role)'}
+                    </label>
+                    {isCreditAuthorizedSeller && (
+                      <span className="text-[10px] font-bold text-amber-600 dark:text-amber-400">
+                        Credit Auth Active
+                      </span>
+                    )}
+                  </div>
                   <input
                     type="number"
-                    value={paidAmountInput}
+                    disabled={!isCreditAuthorizedSeller}
+                    value={isCreditAuthorizedSeller ? paidAmountInput : String(netTotal)}
                     onChange={(e) => setPaidAmountInput(e.target.value)}
                     placeholder={`Full Amount: Rs. ${netTotal}`}
-                    className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-slate-800 font-mono font-bold"
+                    className="w-full px-3 py-2 border border-slate-200 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-slate-800 font-mono font-bold disabled:opacity-70"
                   />
                 </div>
               </div>

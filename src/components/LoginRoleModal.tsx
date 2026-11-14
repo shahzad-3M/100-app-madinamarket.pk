@@ -19,12 +19,13 @@ import {
 } from 'lucide-react';
 import { AppUser, Customer, LoginFormConfig, Reseller, UserAccount, UserRole } from '../types';
 import {
+  createUserAccount,
+  defaultGuestUser,
   getDefaultPinForPhone,
   getLoginFormConfig,
   getOwnerPin,
   getUserAccounts,
   logUserLogin,
-  saveUserAccounts,
   updateCustomerPin,
   updateOwnerPin,
   updateResellerPin,
@@ -32,6 +33,17 @@ import {
 } from '../utils/storage';
 import { createPasswordRecord, generateResetToken, verifyPassword } from '../utils/security';
 import { openWhatsAppDirect } from '../utils/whatsapp';
+
+function normalizePhoneOrId(val: string): string {
+  const clean = val.trim().replace(/[\s-]/g, '');
+  if (clean.startsWith('+92') && clean.length >= 12) {
+    return `0${clean.slice(3)}`;
+  }
+  if (clean.startsWith('92') && clean.length >= 11 && !clean.startsWith('920')) {
+    return `0${clean.slice(2)}`;
+  }
+  return clean;
+}
 
 interface LoginRoleModalProps {
   isOpen: boolean;
@@ -52,10 +64,7 @@ export const LoginRoleModal: React.FC<LoginRoleModalProps> = ({
   resellers = [],
   onLogout,
 }) => {
-  const isGuest =
-    currentUser.role === 'customer' &&
-    (!currentUser.phone || currentUser.phone === '03125256266') &&
-    currentUser.name === 'Online Customer';
+  const isGuest = currentUser?.isAuthenticated !== true;
 
   const [modalMode, setModalMode] = useState<'login' | 'account' | 'forgot_password' | 'force_change_password'>(
     isGuest ? 'login' : 'account'
@@ -69,6 +78,7 @@ export const LoginRoleModal: React.FC<LoginRoleModalProps> = ({
   const [fullName, setFullName] = useState('');
   const [rememberMe, setRememberMe] = useState(true);
   const [showPin, setShowPin] = useState(false);
+  const [showQuickRoles, setShowQuickRoles] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
 
@@ -104,15 +114,18 @@ export const LoginRoleModal: React.FC<LoginRoleModalProps> = ({
       setForgotError('');
       setForgotSuccess('');
       setForcePassError('');
+      setCurrentPinInput('');
+      setNewPinInput('');
+      setConfirmPinInput('');
       setLoginConfig(getLoginFormConfig());
 
-      if (!isGuest && currentUser.name !== 'Online Customer') {
+      if (currentUser?.isAuthenticated === true) {
         setModalMode('account');
       } else {
         setModalMode('login');
       }
     }
-  }, [isOpen, isGuest, currentUser]);
+  }, [isOpen, currentUser?.isAuthenticated]);
 
   if (!isOpen) return null;
 
@@ -122,126 +135,163 @@ export const LoginRoleModal: React.FC<LoginRoleModalProps> = ({
     setErrorMessage('');
     setSuccessMessage('');
 
-    const cleanId = identifier.trim().replace(/[\s-]/g, '');
+    const cleanId = normalizePhoneOrId(identifier);
+    const cleanIdLower = identifier.trim().toLowerCase();
     const cleanPin = pin.trim();
 
     if (!cleanId) {
-      setErrorMessage('Please enter your mobile number or username.');
+      setErrorMessage('Please enter your mobile number, email, or username.');
       return;
     }
 
     if (!cleanPin || cleanPin.length < 4) {
-      setErrorMessage('Please enter your valid security PIN / password.');
+      setErrorMessage('Please enter your valid security PIN / password (min 4 characters).');
       return;
     }
 
+    const userAccounts = getUserAccounts();
+
     // 1. Check Store Owner / Super Admin
     const ownerPin = getOwnerPin();
-    if (
-      (cleanId === '03125256266' || cleanId.toLowerCase() === 'admin' || cleanId === '580987') &&
-      cleanPin === ownerPin
-    ) {
+    const superAdminAcc = userAccounts.find((u) => u.id === 'usr_superadmin' || u.role === 'super_admin');
+    const isSuperAdminIdentifier =
+      cleanId === '03125256266' ||
+      cleanIdLower === 'admin' ||
+      cleanIdLower === 'admin@madinamarket.pk';
+
+    const isSuperAdminPassMatch =
+      isSuperAdminIdentifier &&
+      (cleanPin === ownerPin ||
+        (superAdminAcc
+          ? await verifyPassword(cleanPin, superAdminAcc.passwordHash, superAdminAcc.passwordSalt)
+          : false));
+
+    if (isSuperAdminPassMatch) {
       logUserLogin({
-        userName: 'Al-Haj Muhammad Asif',
-        phone: '03125256266',
+        userId: superAdminAcc?.id || 'usr_superadmin',
+        userName: superAdminAcc?.fullName || 'Shahzad Malik',
+        phone: superAdminAcc?.phone || '03125256266',
         role: 'super_admin',
         status: 'success',
         ipOrDevice: 'Web Applet / Master Console',
         notes: 'Super Admin Master authenticated',
         usedPin: '••••••',
       });
+      if (superAdminAcc) {
+        updateUserAccount(superAdminAcc.id, {
+          lastLoginAt: new Date().toISOString(),
+          loginCount: (superAdminAcc.loginCount || 0) + 1,
+        });
+      }
       onSelectRole('super_admin', {
-        id: 'user_superadmin_1',
-        name: 'Al-Haj Muhammad Asif',
-        urduName: 'الحاج محمد آصف (اسٹور مالک و ایڈمن)',
-        phone: '03125256266',
+        id: superAdminAcc?.id || 'usr_superadmin',
+        name: superAdminAcc?.fullName || 'Shahzad Malik',
+        urduName: superAdminAcc?.urduName || 'شہزاد ملک (سپر ایڈمن)',
+        phone: superAdminAcc?.phone || '03125256266',
+        email: superAdminAcc?.email || 'admin@madinamarket.pk',
         role: 'super_admin',
+        canAuthorizeCreditSale: true,
         isAuthenticated: true,
       });
       onClose();
       return;
     }
 
-    // 2. Check Central User Accounts (Managers, Staff, Investors, Customers)
-    const userAccounts = getUserAccounts();
-    const matchedAccount = userAccounts.find(
+    // 2. Check ALL Matching Central User Accounts (handles shared phones across roles)
+    const matchingAccounts = userAccounts.filter(
       (u) =>
-        u.phone.replace(/[\s-]/g, '') === cleanId ||
-        u.username.toLowerCase() === cleanId.toLowerCase() ||
-        (u.email && u.email.toLowerCase() === cleanId.toLowerCase())
+        normalizePhoneOrId(u.phone) === cleanId ||
+        u.username.toLowerCase() === cleanIdLower ||
+        (u.email && u.email.toLowerCase() === cleanIdLower)
     );
 
-    if (matchedAccount) {
-      if (matchedAccount.status === 'suspended') {
-        setErrorMessage('This account is currently suspended. Please contact administrator.');
-        return;
+    if (matchingAccounts.length > 0) {
+      let authenticatedAcc: UserAccount | null = null;
+      let suspendedMatch = false;
+
+      for (const acc of matchingAccounts) {
+        const isHashValid = await verifyPassword(cleanPin, acc.passwordHash, acc.passwordSalt);
+        const defaultPin = getDefaultPinForPhone(acc.phone);
+        const isTempPinMatch =
+          Boolean(acc.isTemporaryPassword || !acc.passwordHash) &&
+          (cleanPin === acc.suggestedDefaultPin || cleanPin === defaultPin);
+
+        if (isHashValid || isTempPinMatch) {
+          if (acc.status === 'suspended' || acc.status === 'inactive') {
+            suspendedMatch = true;
+            continue;
+          }
+          authenticatedAcc = acc;
+          break;
+        }
       }
 
-      const isPassValid = await verifyPassword(
-        cleanPin,
-        matchedAccount.passwordHash,
-        matchedAccount.passwordSalt
-      );
-
-      // Also check fallback to suggested default PIN
-      const defaultPin = getDefaultPinForPhone(matchedAccount.phone);
-      const isDefaultMatch = cleanPin === defaultPin || cleanPin === matchedAccount.suggestedDefaultPin;
-
-      if (isPassValid || isDefaultMatch) {
+      if (authenticatedAcc) {
         logUserLogin({
-          userId: matchedAccount.id,
-          userName: matchedAccount.fullName,
-          phone: matchedAccount.phone,
-          role: matchedAccount.role,
+          userId: authenticatedAcc.id,
+          userName: authenticatedAcc.fullName,
+          phone: authenticatedAcc.phone,
+          role: authenticatedAcc.role,
           status: 'success',
           ipOrDevice: 'Web Application Terminal',
-          notes: `${matchedAccount.role} signed in successfully`,
+          notes: `${authenticatedAcc.role} signed in successfully`,
           usedPin: '••••••',
         });
 
-        // Update login stats
-        updateUserAccount(matchedAccount.id, {
+        updateUserAccount(authenticatedAcc.id, {
           lastLoginAt: new Date().toISOString(),
-          loginCount: (matchedAccount.loginCount || 0) + 1,
+          loginCount: (authenticatedAcc.loginCount || 0) + 1,
         });
 
-        // Check if mandatory password change is required
-        if (matchedAccount.mustChangePassword || isDefaultMatch) {
-          setPendingUserAccount(matchedAccount);
+        // Only require immediate password replacement when genuinely flagged as temporary/mandatory
+        if (authenticatedAcc.mustChangePassword === true) {
+          setPendingUserAccount(authenticatedAcc);
           setModalMode('force_change_password');
           return;
         }
 
-        onSelectRole(matchedAccount.role, {
-          id: matchedAccount.id,
-          name: matchedAccount.fullName,
-          urduName: matchedAccount.urduName,
-          phone: matchedAccount.phone,
-          role: matchedAccount.role,
-          customerId: matchedAccount.linkedCustomerId,
-          investorId: matchedAccount.linkedInvestorId,
-          resellerCode: matchedAccount.linkedResellerCode,
-          branchId: matchedAccount.linkedBranchId,
-          branchName: matchedAccount.linkedBranchName,
-          managerAuthorities: matchedAccount.managerAuthorities,
+        const isCreditAuth =
+          authenticatedAcc.role === 'super_admin' ||
+          authenticatedAcc.role === 'admin' ||
+          Boolean(
+            authenticatedAcc.canAuthorizeCreditSale ??
+              authenticatedAcc.managerAuthorities?.canAuthorizeCreditSale
+          );
+
+        onSelectRole(authenticatedAcc.role, {
+          id: authenticatedAcc.id,
+          name: authenticatedAcc.fullName,
+          urduName: authenticatedAcc.urduName,
+          phone: authenticatedAcc.phone,
+          email: authenticatedAcc.email,
+          role: authenticatedAcc.role,
+          customerId: authenticatedAcc.linkedCustomerId,
+          investorId: authenticatedAcc.linkedInvestorId,
+          resellerCode: authenticatedAcc.linkedResellerCode,
+          branchId: authenticatedAcc.linkedBranchId,
+          branchName: authenticatedAcc.linkedBranchName,
+          managerAuthorities: authenticatedAcc.managerAuthorities,
+          canAuthorizeCreditSale: isCreditAuth,
           isAuthenticated: true,
         });
         onClose();
         return;
-      } else {
-        setErrorMessage('Incorrect security PIN / password. Please verify and try again.');
+      }
+
+      if (suspendedMatch) {
+        setErrorMessage('This account is currently suspended or inactive. Please contact administrator.');
         return;
       }
     }
 
     // 3. Check Resellers
-    const matchingReseller = resellers.find(
+    const matchingResellers = resellers.filter(
       (r) =>
-        r.phone.replace(/[\s-]/g, '') === cleanId ||
-        r.referralCode.toLowerCase() === cleanId.toLowerCase()
+        normalizePhoneOrId(r.phone) === cleanId ||
+        r.referralCode.toLowerCase() === cleanIdLower
     );
 
-    if (matchingReseller) {
+    for (const matchingReseller of matchingResellers) {
       const expectedPin = matchingReseller.pin || getDefaultPinForPhone(matchingReseller.phone);
       if (cleanPin === expectedPin) {
         logUserLogin({
@@ -265,23 +315,21 @@ export const LoginRoleModal: React.FC<LoginRoleModalProps> = ({
         });
         onClose();
         return;
-      } else {
-        setErrorMessage('Invalid reseller PIN code.');
-        return;
       }
     }
 
-    // 4. Check Existing Customer
-    const matchingCustomer = customers.find(
-      (c) => c.phone.replace(/[\s-]/g, '') === cleanId
+    // 4. Check Existing Customers
+    const matchingCustomers = customers.filter(
+      (c) =>
+        normalizePhoneOrId(c.phone) === cleanId ||
+        (c.email && c.email.toLowerCase() === cleanIdLower)
     );
 
-    if (matchingCustomer) {
+    for (const matchingCustomer of matchingCustomers) {
       const defaultPin = getDefaultPinForPhone(matchingCustomer.phone);
       const expectedPin = matchingCustomer.pin || defaultPin;
-      const isDefault = cleanPin === defaultPin;
 
-      if (cleanPin === expectedPin || isDefault) {
+      if (cleanPin === expectedPin) {
         logUserLogin({
           userId: matchingCustomer.id,
           userName: matchingCustomer.name,
@@ -289,16 +337,17 @@ export const LoginRoleModal: React.FC<LoginRoleModalProps> = ({
           role: 'customer',
           status: 'success',
           ipOrDevice: 'Mobile Web Applet',
-          notes: isDefault ? 'Customer login with default PIN' : 'Customer login with private PIN',
+          notes: !matchingCustomer.pin ? 'Customer login with default PIN' : 'Customer login with private PIN',
           usedPin: '••••••',
         });
 
-        if (isDefault) {
-          // Guided mandatory password update
+        // If customer has never changed their initial default PIN, prompt guided update
+        if (!matchingCustomer.pin && cleanPin === defaultPin) {
           const virtualAccount: UserAccount = {
             id: `usr_${matchingCustomer.id}`,
-            username: matchingCustomer.phone,
+            username: matchingCustomer.phone.replace(/[\s-]/g, ''),
             fullName: matchingCustomer.name,
+            urduName: matchingCustomer.urduName,
             phone: matchingCustomer.phone,
             role: 'customer',
             status: 'active',
@@ -322,17 +371,23 @@ export const LoginRoleModal: React.FC<LoginRoleModalProps> = ({
         });
         onClose();
         return;
-      } else {
-        setErrorMessage('Invalid credentials. Please verify your mobile number and security PIN.');
-        return;
       }
     }
 
-    // 5. Instant Customer Self-Registration
-    if (loginConfig.allowSelfRegistration) {
+    // If any account matched the identifier but failed password check, stop before self-registration
+    if (matchingAccounts.length > 0 || matchingResellers.length > 0 || matchingCustomers.length > 0 || isSuperAdminIdentifier) {
+      setErrorMessage(
+        'Incorrect PIN / password for this account. If multiple roles share a mobile number, sign in using your exact username (e.g. manager_shahalam, admin, tariq_investor) or verify your PIN.'
+      );
+      return;
+    }
+
+    // 5. Instant Customer Self-Registration (for brand new unregistered mobile numbers)
+    const digitsOnly = cleanId.replace(/\D/g, '');
+    if (loginConfig.allowSelfRegistration && digitsOnly.length >= 10) {
       const defaultPin = getDefaultPinForPhone(cleanId);
       if (cleanPin === defaultPin) {
-        const newCustName = fullName.trim() || `Customer ${cleanId.slice(-4)}`;
+        const newCustName = fullName.trim() || `Customer ${digitsOnly.slice(-4)}`;
         const newCustId = `cust_${Date.now()}`;
         const newAccount: UserAccount = {
           id: `usr_${Date.now()}`,
@@ -343,6 +398,7 @@ export const LoginRoleModal: React.FC<LoginRoleModalProps> = ({
           status: 'active',
           linkedCustomerId: newCustId,
           mustChangePassword: true,
+          isTemporaryPassword: true,
           createdAt: new Date().toISOString(),
         };
 
@@ -362,13 +418,10 @@ export const LoginRoleModal: React.FC<LoginRoleModalProps> = ({
       }
     }
 
-    setErrorMessage('Invalid credentials. Please check your username/phone and password.');
+    setErrorMessage('Invalid credentials. Please check your mobile number / username and password.');
   };
 
   // MANDATORY / FORCED PASSWORD CHANGE HANDLER
-  // Immediately completes and satisfies user request 2.4:
-  // "After a successful password update, display a simple confirmation such as 'Password changed successfully.'
-  // Do not show unnecessary popup windows asking the user to change the password again."
   const handleForcedPasswordSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setForcePassError('');
@@ -386,41 +439,67 @@ export const LoginRoleModal: React.FC<LoginRoleModalProps> = ({
     const passRecord = await createPasswordRecord(forcedNewPass.trim());
 
     if (pendingUserAccount) {
-      // Invalidate temporary credentials and clear mustChangePassword
-      updateUserAccount(pendingUserAccount.id, {
+      const updatedExisting = updateUserAccount(pendingUserAccount.id, {
         passwordHash: passRecord.hash,
         passwordSalt: passRecord.salt,
         mustChangePassword: false,
         isTemporaryPassword: false,
       });
 
-      if (pendingUserAccount.linkedCustomerId) {
-        updateCustomerPin(pendingUserAccount.linkedCustomerId, forcedNewPass.trim());
+      let savedAccount = pendingUserAccount;
+      if (!updatedExisting) {
+        savedAccount = createUserAccount({
+          username: pendingUserAccount.username,
+          fullName: pendingUserAccount.fullName,
+          urduName: pendingUserAccount.urduName,
+          phone: pendingUserAccount.phone,
+          email: pendingUserAccount.email,
+          role: pendingUserAccount.role,
+          status: 'active',
+          passwordHash: passRecord.hash,
+          passwordSalt: passRecord.salt,
+          mustChangePassword: false,
+          isTemporaryPassword: false,
+          linkedCustomerId: pendingUserAccount.linkedCustomerId,
+          linkedInvestorId: pendingUserAccount.linkedInvestorId,
+          linkedResellerCode: pendingUserAccount.linkedResellerCode,
+          linkedBranchId: pendingUserAccount.linkedBranchId,
+          linkedBranchName: pendingUserAccount.linkedBranchName,
+          managerAuthorities: pendingUserAccount.managerAuthorities,
+          canAuthorizeCreditSale: pendingUserAccount.canAuthorizeCreditSale,
+        });
       }
 
-      onSelectRole(pendingUserAccount.role, {
-        id: pendingUserAccount.id,
-        name: pendingUserAccount.fullName,
-        urduName: pendingUserAccount.urduName,
-        phone: pendingUserAccount.phone,
-        role: pendingUserAccount.role,
-        customerId: pendingUserAccount.linkedCustomerId,
-        investorId: pendingUserAccount.linkedInvestorId,
-        resellerCode: pendingUserAccount.linkedResellerCode,
-        branchId: pendingUserAccount.linkedBranchId,
-        branchName: pendingUserAccount.linkedBranchName,
-        managerAuthorities: pendingUserAccount.managerAuthorities,
+      if (savedAccount.linkedCustomerId) {
+        updateCustomerPin(savedAccount.linkedCustomerId, forcedNewPass.trim());
+      }
+
+      onSelectRole(savedAccount.role, {
+        id: savedAccount.id,
+        name: savedAccount.fullName,
+        urduName: savedAccount.urduName,
+        phone: savedAccount.phone,
+        email: savedAccount.email,
+        role: savedAccount.role,
+        customerId: savedAccount.linkedCustomerId,
+        investorId: savedAccount.linkedInvestorId,
+        resellerCode: savedAccount.linkedResellerCode,
+        branchId: savedAccount.linkedBranchId,
+        branchName: savedAccount.linkedBranchName,
+        managerAuthorities: savedAccount.managerAuthorities,
+        canAuthorizeCreditSale:
+          savedAccount.canAuthorizeCreditSale ??
+          savedAccount.managerAuthorities?.canAuthorizeCreditSale,
         mustChangePassword: false,
         hasDefaultPin: false,
         isAuthenticated: true,
       });
     }
 
-    // Single clean confirmation as requested in 2.4
     setSuccessMessage('Password changed successfully.');
     setTimeout(() => {
       onClose();
-    }, 1200);
+    }, 900);
   };
 
   // FORGOT PASSWORD RECOVERY HANDLERS
@@ -483,7 +562,7 @@ export const LoginRoleModal: React.FC<LoginRoleModalProps> = ({
     }, 1500);
   };
 
-  // CHANGE PIN HANDLER INSIDE USER PORTAL
+  // CHANGE PIN HANDLER INSIDE USER PORTAL (Supports ALL authenticated roles)
   const handleChangePin = async (e: React.FormEvent) => {
     e.preventDefault();
     setChangePinError('');
@@ -504,13 +583,68 @@ export const LoginRoleModal: React.FC<LoginRoleModalProps> = ({
       return;
     }
 
+    const curPin = currentPinInput.trim();
+    const nextPin = newPinInput.trim();
+    const userAccounts = getUserAccounts();
+    const matchedUserAcc = userAccounts.find((u) => u.id === currentUser.id);
+
     if (currentUser.role === 'super_admin' || currentUser.role === 'admin') {
       const currentMaster = getOwnerPin();
-      if (currentPinInput.trim() !== currentMaster) {
+      const accValid = matchedUserAcc
+        ? await verifyPassword(curPin, matchedUserAcc.passwordHash, matchedUserAcc.passwordSalt)
+        : false;
+      if (curPin !== currentMaster && !accValid) {
         setChangePinError('Current Master PIN is incorrect.');
         return;
       }
-      updateOwnerPin(newPinInput.trim());
+      if (currentUser.role === 'super_admin') {
+        updateOwnerPin(nextPin);
+      }
+      if (matchedUserAcc) {
+        const rec = await createPasswordRecord(nextPin);
+        updateUserAccount(matchedUserAcc.id, {
+          passwordHash: rec.hash,
+          passwordSalt: rec.salt,
+          mustChangePassword: false,
+          isTemporaryPassword: false,
+        });
+      }
+      setChangePinSuccess('Password changed successfully.');
+      setCurrentPinInput('');
+      setNewPinInput('');
+      setConfirmPinInput('');
+      return;
+    }
+
+    if (matchedUserAcc) {
+      const isValid = await verifyPassword(
+        curPin,
+        matchedUserAcc.passwordHash,
+        matchedUserAcc.passwordSalt
+      );
+      if (!isValid) {
+        setChangePinError('Current password / PIN is incorrect.');
+        return;
+      }
+      const rec = await createPasswordRecord(nextPin);
+      updateUserAccount(matchedUserAcc.id, {
+        passwordHash: rec.hash,
+        passwordSalt: rec.salt,
+        mustChangePassword: false,
+        isTemporaryPassword: false,
+      });
+      if (matchedUserAcc.linkedCustomerId) {
+        updateCustomerPin(matchedUserAcc.linkedCustomerId, nextPin);
+      }
+      if (matchedUserAcc.linkedResellerCode) {
+        const res = resellers.find((r) => r.referralCode === matchedUserAcc.linkedResellerCode);
+        if (res) updateResellerPin(res.id, nextPin);
+      }
+      onSelectRole(currentUser.role, {
+        ...currentUser,
+        hasDefaultPin: false,
+        mustChangePassword: false,
+      });
       setChangePinSuccess('Password changed successfully.');
       setCurrentPinInput('');
       setNewPinInput('');
@@ -520,15 +654,15 @@ export const LoginRoleModal: React.FC<LoginRoleModalProps> = ({
 
     if (currentUser.role === 'customer') {
       const targetCustomer = customers.find(
-        (c) => c.id === currentUser.customerId || c.phone === currentUser.phone
+        (c) => c.id === currentUser.customerId || normalizePhoneOrId(c.phone) === normalizePhoneOrId(currentUser.phone || '')
       );
       const expected = targetCustomer?.pin || getDefaultPinForPhone(currentUser.phone || '');
-      if (currentPinInput.trim() !== expected) {
+      if (curPin !== expected) {
         setChangePinError('Current PIN is incorrect.');
         return;
       }
       if (targetCustomer) {
-        updateCustomerPin(targetCustomer.id, newPinInput.trim());
+        updateCustomerPin(targetCustomer.id, nextPin);
       }
       onSelectRole('customer', {
         ...currentUser,
@@ -547,18 +681,17 @@ export const LoginRoleModal: React.FC<LoginRoleModalProps> = ({
         (r) => r.id === currentUser.id || r.referralCode === currentUser.resellerCode
       );
       const expected = targetReseller?.pin || (targetReseller ? getDefaultPinForPhone(targetReseller.phone) : '123456');
-      if (currentPinInput.trim() !== expected) {
+      if (curPin !== expected) {
         setChangePinError('Current PIN is incorrect.');
         return;
       }
       if (targetReseller) {
-        updateResellerPin(targetReseller.id, newPinInput.trim());
+        updateResellerPin(targetReseller.id, nextPin);
       }
       setChangePinSuccess('Password changed successfully.');
       setCurrentPinInput('');
       setNewPinInput('');
       setConfirmPinInput('');
-      return;
     }
   };
 
@@ -723,19 +856,63 @@ export const LoginRoleModal: React.FC<LoginRoleModalProps> = ({
               </button>
             </form>
 
-            {/* Support contact info */}
-            <div className="pt-3 border-t border-slate-100 dark:border-slate-800 text-center">
-              <button
-                type="button"
-                onClick={() => {
-                  const text = 'السلام علیکم! مجھے 100DAGAR اکاؤنٹ میں لاگ ان / پاس ورڈ میں مدد چاہیے۔ شکریہ!';
-                  openWhatsAppDirect('03125256266', text);
-                }}
-                className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 hover:underline flex items-center justify-center gap-1.5 mx-auto cursor-pointer"
-              >
-                <Phone className="w-3.5 h-3.5" />
-                <span>Help &amp; WhatsApp Support ({loginConfig.supportContactNumber})</span>
-              </button>
+            {/* Quick Role Credentials Helper */}
+            <div className="pt-2 border-t border-slate-100 dark:border-slate-800 space-y-2.5">
+              <div className="flex items-center justify-between">
+                <button
+                  type="button"
+                  onClick={() => setShowQuickRoles(!showQuickRoles)}
+                  className="text-[11px] font-bold text-slate-600 dark:text-slate-300 hover:text-amber-600 dark:hover:text-amber-400 flex items-center gap-1 cursor-pointer"
+                >
+                  <HelpCircle className="w-3.5 h-3.5 text-amber-500" />
+                  <span>{showQuickRoles ? 'Hide Role Credentials' : 'Quick Role Access & Credentials'}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    const text = 'السلام علیکم! مجھے 100DAGAR اکاؤنٹ میں لاگ ان / پاس ورڈ میں مدد چاہیے۔ شکریہ!';
+                    openWhatsAppDirect('03125256266', text);
+                  }}
+                  className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 hover:underline flex items-center gap-1 cursor-pointer"
+                >
+                  <Phone className="w-3 h-3" />
+                  <span>Support ({loginConfig.supportContactNumber})</span>
+                </button>
+              </div>
+
+              {showQuickRoles && (
+                <div className="p-2.5 bg-slate-50 dark:bg-slate-800/80 rounded-xl border border-slate-200 dark:border-slate-700 space-y-1.5 text-[11px]">
+                  <p className="font-bold text-slate-700 dark:text-slate-300">
+                    Click any role to fill credentials:
+                  </p>
+                  <div className="grid grid-cols-2 gap-1.5">
+                    {[
+                      { label: 'Branch Manager', id: 'manager_shahalam', pin: '526266' },
+                      { label: 'Walk-In Staff', id: 'hamza_pos', pin: '667890' },
+                      { label: 'Investor', id: 'tariq_investor', pin: '234567' },
+                      { label: 'Reseller', id: 'usman_reseller', pin: '526266' },
+                      { label: 'Customer', id: 'madina_cosmetics', pin: '234567' },
+                    ].map((preset) => (
+                      <button
+                        key={preset.id}
+                        type="button"
+                        onClick={() => {
+                          setIdentifier(preset.id);
+                          setPin(preset.pin);
+                          setErrorMessage('');
+                        }}
+                        className="px-2 py-1.5 text-left rounded-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 hover:border-amber-400 transition-colors cursor-pointer"
+                      >
+                        <div className="font-bold text-slate-900 dark:text-white">{preset.label}</div>
+                        <div className="font-mono text-[10px] text-slate-500">
+                          {preset.id} · {preset.pin}
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -951,14 +1128,13 @@ export const LoginRoleModal: React.FC<LoginRoleModalProps> = ({
 
                 <button
                   onClick={() => {
-                    if (onLogout) onLogout();
-                    onSelectRole('customer', {
-                      id: 'user_cust_default',
-                      name: 'Online Customer',
-                      role: 'customer',
-                      phone: '03125256266',
-                      isAuthenticated: false,
-                    });
+                    if (onLogout) {
+                      onLogout();
+                    } else {
+                      onSelectRole('customer', defaultGuestUser);
+                    }
+                    setIdentifier('');
+                    setPin('');
                     setModalMode('login');
                   }}
                   className="px-2.5 py-1 text-xs text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-950/50 rounded-lg border border-red-200 dark:border-red-900 flex items-center gap-1 cursor-pointer font-semibold"
