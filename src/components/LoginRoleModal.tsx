@@ -536,23 +536,91 @@ export const LoginRoleModal: React.FC<LoginRoleModalProps> = ({
       return;
     }
 
-    const passRecord = await createPasswordRecord(recoveryNewPass.trim());
+    const nextPass = recoveryNewPass.trim();
+    const passRecord = await createPasswordRecord(nextPass);
     const accounts = getUserAccounts();
-    const cleanId = forgotIdentifier.trim().replace(/[\s-]/g, '');
+    const cleanNorm = normalizePhoneOrId(forgotIdentifier);
+    const cleanLower = forgotIdentifier.trim().toLowerCase();
 
-    const found = accounts.find(
+    const matchingAccounts = accounts.filter(
       (a) =>
-        a.phone.replace(/[\s-]/g, '') === cleanId ||
-        a.username.toLowerCase() === cleanId.toLowerCase()
+        normalizePhoneOrId(a.phone) === cleanNorm ||
+        a.username.toLowerCase() === cleanLower ||
+        (a.email && a.email.toLowerCase() === cleanLower)
     );
 
-    if (found) {
-      updateUserAccount(found.id, {
+    let updatedAny = false;
+    for (const acc of matchingAccounts) {
+      updateUserAccount(acc.id, {
         passwordHash: passRecord.hash,
         passwordSalt: passRecord.salt,
         mustChangePassword: false,
         isTemporaryPassword: false,
       });
+      if (acc.role === 'super_admin') {
+        updateOwnerPin(nextPass);
+      }
+      if (acc.linkedCustomerId) {
+        updateCustomerPin(acc.linkedCustomerId, nextPass);
+      }
+      if (acc.linkedResellerCode) {
+        const res = resellers.find((r) => r.referralCode === acc.linkedResellerCode);
+        if (res) updateResellerPin(res.id, nextPass);
+      }
+      updatedAny = true;
+    }
+
+    // Also update matching Customer or Reseller records directly if no UserAccount existed
+    const matchedCust = customers.find(
+      (c) => normalizePhoneOrId(c.phone) === cleanNorm || (c.email && c.email.toLowerCase() === cleanLower)
+    );
+    if (matchedCust) {
+      updateCustomerPin(matchedCust.id, nextPass);
+      if (!matchingAccounts.some((a) => a.linkedCustomerId === matchedCust.id)) {
+        createUserAccount({
+          username: normalizePhoneOrId(matchedCust.phone),
+          fullName: matchedCust.name,
+          urduName: matchedCust.urduName,
+          phone: matchedCust.phone,
+          email: matchedCust.email,
+          role: 'customer',
+          status: 'active',
+          passwordHash: passRecord.hash,
+          passwordSalt: passRecord.salt,
+          mustChangePassword: false,
+          isTemporaryPassword: false,
+          linkedCustomerId: matchedCust.id,
+        });
+      }
+      updatedAny = true;
+    }
+
+    const matchedRes = resellers.find(
+      (r) => normalizePhoneOrId(r.phone) === cleanNorm || r.referralCode.toLowerCase() === cleanLower
+    );
+    if (matchedRes) {
+      updateResellerPin(matchedRes.id, nextPass);
+      if (!matchingAccounts.some((a) => a.linkedResellerCode === matchedRes.referralCode)) {
+        createUserAccount({
+          username: matchedRes.referralCode.toLowerCase(),
+          fullName: matchedRes.name,
+          urduName: matchedRes.urduName,
+          phone: matchedRes.phone,
+          role: 'reseller',
+          status: 'active',
+          passwordHash: passRecord.hash,
+          passwordSalt: passRecord.salt,
+          mustChangePassword: false,
+          isTemporaryPassword: false,
+          linkedResellerCode: matchedRes.referralCode,
+        });
+      }
+      updatedAny = true;
+    }
+
+    if (!updatedAny) {
+      setForgotError('No matching account found for that mobile number or username.');
+      return;
     }
 
     setForgotSuccess('Password changed successfully. You can now sign in with your new password.');
@@ -657,13 +725,29 @@ export const LoginRoleModal: React.FC<LoginRoleModalProps> = ({
         (c) => c.id === currentUser.customerId || normalizePhoneOrId(c.phone) === normalizePhoneOrId(currentUser.phone || '')
       );
       const expected = targetCustomer?.pin || getDefaultPinForPhone(currentUser.phone || '');
-      if (curPin !== expected) {
+      const curHashValid = await verifyPassword(curPin, expected);
+      if (!curHashValid && curPin !== expected) {
         setChangePinError('Current PIN is incorrect.');
         return;
       }
+      const rec = await createPasswordRecord(nextPin);
       if (targetCustomer) {
         updateCustomerPin(targetCustomer.id, nextPin);
       }
+      createUserAccount({
+        username: normalizePhoneOrId(targetCustomer?.phone || currentUser.phone || currentUser.id),
+        fullName: targetCustomer?.name || currentUser.name,
+        urduName: targetCustomer?.urduName || currentUser.urduName,
+        phone: targetCustomer?.phone || currentUser.phone || '',
+        email: targetCustomer?.email || currentUser.email,
+        role: 'customer',
+        status: 'active',
+        passwordHash: rec.hash,
+        passwordSalt: rec.salt,
+        mustChangePassword: false,
+        isTemporaryPassword: false,
+        linkedCustomerId: targetCustomer?.id || currentUser.customerId,
+      });
       onSelectRole('customer', {
         ...currentUser,
         hasDefaultPin: false,
@@ -685,9 +769,28 @@ export const LoginRoleModal: React.FC<LoginRoleModalProps> = ({
         setChangePinError('Current PIN is incorrect.');
         return;
       }
+      const rec = await createPasswordRecord(nextPin);
       if (targetReseller) {
         updateResellerPin(targetReseller.id, nextPin);
+        createUserAccount({
+          username: targetReseller.referralCode.toLowerCase(),
+          fullName: targetReseller.name,
+          urduName: targetReseller.urduName,
+          phone: targetReseller.phone,
+          role: 'reseller',
+          status: 'active',
+          passwordHash: rec.hash,
+          passwordSalt: rec.salt,
+          mustChangePassword: false,
+          isTemporaryPassword: false,
+          linkedResellerCode: targetReseller.referralCode,
+        });
       }
+      onSelectRole('reseller', {
+        ...currentUser,
+        hasDefaultPin: false,
+        mustChangePassword: false,
+      });
       setChangePinSuccess('Password changed successfully.');
       setCurrentPinInput('');
       setNewPinInput('');

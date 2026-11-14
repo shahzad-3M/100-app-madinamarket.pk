@@ -26,17 +26,19 @@ export const AddCustomerModal: React.FC<AddCustomerModalProps> = ({
   const [paymentTermsDays, setPaymentTermsDays] = useState(String(profile.defaultPaymentTermsDays || 7)); // USER DIRECTIVE: 7 days payment terms
   const [notes, setNotes] = useState('');
   const [openingBalance, setOpeningBalance] = useState('0');
+  const [formError, setFormError] = useState('');
 
   if (!isOpen) return null;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    setFormError('');
     if (!name.trim()) {
-      alert('Please enter party / customer name');
+      setFormError('Please enter party / customer name.');
       return;
     }
     if (!phone.trim()) {
-      alert('Please enter WhatsApp mobile number for sending payment reminders');
+      setFormError('Please enter WhatsApp mobile number for sending payment reminders.');
       return;
     }
 
@@ -93,6 +95,11 @@ export const AddCustomerModal: React.FC<AddCustomerModalProps> = ({
         </div>
 
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
+          {formError && (
+            <div className="p-2.5 rounded-lg bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800 text-xs font-semibold text-red-700 dark:text-red-300">
+              {formError}
+            </div>
+          )}
           <div>
             <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
               Customer Classification (کسٹمر کی قسم) *

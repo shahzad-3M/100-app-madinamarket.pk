@@ -30,6 +30,7 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
   const [notes, setNotes] = useState<string>('');
   const [paymentMode, setPaymentMode] = useState<PaymentMode>('easypaisa');
   const [sendWhatsApp, setSendWhatsApp] = useState<boolean>(true);
+  const [formError, setFormError] = useState<string>('');
 
   // Line items support
   const [showItemized, setShowItemized] = useState<boolean>(false);
@@ -94,13 +95,14 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    setFormError('');
     const parsedAmount = parseFloat(amount);
     if (isNaN(parsedAmount) || parsedAmount <= 0) {
-      alert('Please enter a valid amount');
+      setFormError('Please enter a valid amount greater than 0.');
       return;
     }
     if (!customerId) {
-      alert('Please select a customer');
+      setFormError('Please select a customer.');
       return;
     }
 
@@ -148,6 +150,11 @@ export const AddTransactionModal: React.FC<AddTransactionModalProps> = ({
         </div>
 
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
+          {formError && (
+            <div className="p-2.5 rounded-lg bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800 text-xs font-semibold text-red-700 dark:text-red-300">
+              {formError}
+            </div>
+          )}
           {/* Segmented Type Toggle */}
           <div className="flex items-center gap-1 p-1 bg-slate-100 dark:bg-slate-800 rounded-lg">
             <button

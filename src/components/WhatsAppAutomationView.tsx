@@ -27,6 +27,7 @@ import {
   WhatsAppNotification,
 } from '../types';
 import { openWhatsAppDirect, formatPaymentChannelsText } from '../utils/whatsapp';
+import { ToastBanner, ToastMessage } from './AppDialogs';
 
 interface WhatsAppAutomationViewProps {
   notifications: WhatsAppNotification[];
@@ -83,6 +84,16 @@ export const WhatsAppAutomationView: React.FC<WhatsAppAutomationViewProps> = ({
   const [cAgeGroup, setCAgeGroup] = useState<AgeGroupType>('26-35');
   const [cType, setCType] = useState<'retail' | 'individual' | 'lead'>('retail');
   const [cNotes, setCNotes] = useState('');
+  const [contactError, setContactError] = useState<string | null>(null);
+  const [toasts, setToasts] = useState<ToastMessage[]>([]);
+
+  const pushToast = (text: string, type: ToastMessage['type'] = 'info') => {
+    const id = `toast_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+    setToasts((prev) => [...prev, { id, text, type }]);
+    setTimeout(() => {
+      setToasts((prev) => prev.filter((t) => t.id !== id));
+    }, 4500);
+  };
 
   const todayStr = new Date().toISOString().split('T')[0];
 
@@ -122,7 +133,7 @@ export const WhatsAppAutomationView: React.FC<WhatsAppAutomationViewProps> = ({
       (n) => n.status === 'pending' && n.scheduledFor <= todayStr
     );
     if (dueItems.length === 0) {
-      alert('No reminders due today.');
+      pushToast('No reminders due today.', 'info');
       return;
     }
 
@@ -130,10 +141,11 @@ export const WhatsAppAutomationView: React.FC<WhatsAppAutomationViewProps> = ({
     handleDirectSend(first);
 
     if (dueItems.length > 1) {
-      alert(
+      pushToast(
         `Dispatched first WhatsApp reminder to ${first.customerName}. Click Send on the remaining ${
           dueItems.length - 1
-        } queued alerts below.`
+        } queued alerts below.`,
+        'success'
       );
     }
   };
@@ -601,7 +613,7 @@ export const WhatsAppAutomationView: React.FC<WhatsAppAutomationViewProps> = ({
                       onClick={() => {
                         const msg = `📢 *New Product Alert! / نئی پروڈکٹ کی آمد*\n*${profile.name}*\n\nمحترم کسٹمر، ہمارے پاس نیا اسٹاک آ گیا ہے!\n\n📦 *${prod.productName}*\n📝 ${prod.description}\n${prod.price ? `💰 Price / قیمت: *${profile.currencySymbol} ${prod.price.toLocaleString('en-PK')}*\n` : ''}\n🔗 *View Product Link:*\n${prod.productLink}\n\nآرڈر کے لیے واٹس ایپ پر رابطہ کریں۔`;
                         navigator.clipboard.writeText(msg);
-                        alert('Broadcast message copied to clipboard!');
+                        pushToast('Broadcast message copied to clipboard!', 'success');
                       }}
                       className="text-indigo-600 dark:text-indigo-400 hover:underline font-medium inline-flex items-center gap-1 cursor-pointer"
                     >
@@ -670,7 +682,7 @@ export const WhatsAppAutomationView: React.FC<WhatsAppAutomationViewProps> = ({
                       <button
                         onClick={() => {
                           navigator.clipboard.writeText(camp.messageText);
-                          alert('Campaign message text copied to clipboard!');
+                          pushToast('Campaign message text copied to clipboard!', 'success');
                         }}
                         className="px-2.5 py-1 text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 rounded text-xs cursor-pointer flex items-center gap-1"
                       >
@@ -819,10 +831,22 @@ export const WhatsAppAutomationView: React.FC<WhatsAppAutomationViewProps> = ({
                   <h3 className="text-sm font-bold text-slate-900 dark:text-white">
                     Add Manual Broadcast Contact
                   </h3>
-                  <button onClick={() => setIsContactModalOpen(false)} className="p-1 cursor-pointer">
+                  <button
+                    onClick={() => {
+                      setContactError(null);
+                      setIsContactModalOpen(false);
+                    }}
+                    className="p-1 cursor-pointer"
+                  >
                     <X className="w-4 h-4" />
                   </button>
                 </div>
+
+                {contactError && (
+                  <div className="p-2.5 rounded-lg bg-red-50 dark:bg-red-950/60 border border-red-200 dark:border-red-800 text-xs font-bold text-red-700 dark:text-red-300">
+                    {contactError}
+                  </div>
+                )}
 
                 <div className="space-y-3">
                   <div>
@@ -939,8 +963,9 @@ export const WhatsAppAutomationView: React.FC<WhatsAppAutomationViewProps> = ({
                     <button
                       type="button"
                       onClick={() => {
+                        setContactError(null);
                         if (!cName.trim() || !cPhone.trim()) {
-                          alert('Please enter Name and Phone');
+                          setContactError('Please enter Name and Phone.');
                           return;
                         }
                         const newContact: BroadcastContact = {
@@ -959,6 +984,7 @@ export const WhatsAppAutomationView: React.FC<WhatsAppAutomationViewProps> = ({
                           onSaveManualContact(newContact);
                         }
                         setIsContactModalOpen(false);
+                        pushToast(`Contact ${newContact.name} saved.`, 'success');
                       }}
                       className="px-5 py-2 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold rounded-xl cursor-pointer"
                     >
@@ -1051,6 +1077,11 @@ export const WhatsAppAutomationView: React.FC<WhatsAppAutomationViewProps> = ({
           )}
         </div>
       )}
+
+      <ToastBanner
+        toasts={toasts}
+        onDismiss={(id) => setToasts((prev) => prev.filter((t) => t.id !== id))}
+      />
     </div>
   );
 };

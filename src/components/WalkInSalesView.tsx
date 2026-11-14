@@ -49,6 +49,7 @@ import {
   calculateSalespersonCommission,
 } from '../utils/storage';
 import { openWhatsAppDirect } from '../utils/whatsapp';
+import { ToastBanner, ToastMessage } from './AppDialogs';
 
 interface WalkInSalesViewProps {
   products: ProductItem[];
@@ -114,6 +115,16 @@ export const WalkInSalesView: React.FC<WalkInSalesViewProps> = ({
   const [newCustPhone, setNewCustPhone] = useState('');
   const [newCustEmail, setNewCustEmail] = useState('');
   const [newCustReferral, setNewCustReferral] = useState('');
+  const [quickRegError, setQuickRegError] = useState<string | null>(null);
+  const [toasts, setToasts] = useState<ToastMessage[]>([]);
+
+  const pushToast = (text: string, type: ToastMessage['type'] = 'info') => {
+    const id = `toast_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+    setToasts((prev) => [...prev, { id, text, type }]);
+    setTimeout(() => {
+      setToasts((prev) => prev.filter((t) => t.id !== id));
+    }, 4500);
+  };
 
   // Authorities check
   const managerAuth = currentUser.managerAuthorities;
@@ -211,12 +222,12 @@ export const WalkInSalesView: React.FC<WalkInSalesViewProps> = ({
   // COMPLETE SALE
   const handleProcessSale = () => {
     if (cart.length === 0) {
-      alert('Cart is empty. Please select products first.');
+      pushToast('Cart is empty. Please select products first.', 'error');
       return;
     }
 
     if (!customerNameInput.trim() || !customerPhoneInput.trim()) {
-      alert('Customer Name and Contact Phone are required for in-store sales records.');
+      pushToast('Customer Name and Contact Phone are required for in-store sales records.', 'error');
       return;
     }
 
@@ -224,8 +235,9 @@ export const WalkInSalesView: React.FC<WalkInSalesViewProps> = ({
     if (appliedDiscount > 0) {
       const maxDiscountValue = (subtotal * maxDiscountPercent) / 100;
       if (appliedDiscount > maxDiscountValue && !currentUser.role?.includes('admin')) {
-        alert(
-          `Discount of Rs. ${appliedDiscount} exceeds your authorized manager limit of ${maxDiscountPercent}% (Max Rs. ${Math.round(maxDiscountValue)}).`
+        pushToast(
+          `Discount of Rs. ${appliedDiscount} exceeds your authorized manager limit of ${maxDiscountPercent}% (Max Rs. ${Math.round(maxDiscountValue)}).`,
+          'error'
         );
         return;
       }
@@ -236,7 +248,10 @@ export const WalkInSalesView: React.FC<WalkInSalesViewProps> = ({
     const dueAmount = Math.max(0, netTotal - paidAmount);
 
     if (dueAmount > 0 && !isCreditAuthorizedSeller) {
-      alert('Only authorized sellers (with Credit Sale role permission) are allowed to process credit/due balances.');
+      pushToast(
+        'Only authorized sellers (with Credit Sale role permission) are allowed to process credit/due balances.',
+        'error'
+      );
       return;
     }
 
@@ -377,15 +392,16 @@ export const WalkInSalesView: React.FC<WalkInSalesViewProps> = ({
 
   // QUICK REGISTER CUSTOMER
   const handleQuickRegisterCustomer = () => {
+    setQuickRegError(null);
     if (!newCustName.trim() || !newCustPhone.trim()) {
-      alert('Name and Mobile Number are required.');
+      setQuickRegError('Name and Mobile Number are required.');
       return;
     }
 
     const clean = newCustPhone.replace(/\D/g, '');
     const exists = customers.some((c) => c.phone.replace(/\D/g, '') === clean);
     if (exists) {
-      alert('A customer with this phone number already exists.');
+      setQuickRegError('A customer with this phone number already exists.');
       return;
     }
 
@@ -1076,6 +1092,13 @@ export const WalkInSalesView: React.FC<WalkInSalesViewProps> = ({
               </button>
             </div>
 
+            {quickRegError && (
+              <div className="p-2.5 rounded-lg bg-red-50 dark:bg-red-950/60 border border-red-200 dark:border-red-800 text-xs font-bold text-red-700 dark:text-red-300 flex items-center gap-1.5">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                <span>{quickRegError}</span>
+              </div>
+            )}
+
             <div className="space-y-3">
               <div>
                 <label className="text-slate-600 dark:text-slate-400 font-bold block mb-1">
@@ -1276,6 +1299,11 @@ export const WalkInSalesView: React.FC<WalkInSalesViewProps> = ({
           </div>
         </div>
       )}
+
+      <ToastBanner
+        toasts={toasts}
+        onDismiss={(id) => setToasts((prev) => prev.filter((t) => t.id !== id))}
+      />
     </div>
   );
 };

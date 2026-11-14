@@ -48,6 +48,14 @@ import {
   getResellers,
   saveResellers,
 } from '../utils/storage';
+import {
+  ToastBanner,
+  ToastMessage,
+  ConfirmDialogModal,
+  ConfirmDialogState,
+  InputPromptModal,
+  InputPromptState,
+} from './AppDialogs';
 
 interface SettingsViewProps {
   profile: BusinessProfile;
@@ -90,6 +98,17 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const [userListNotice, setUserListNotice] = useState<string | null>(null);
   const [revealedPins, setRevealedPins] = useState<Record<string, boolean>>({});
   const [newDeliveryCity, setNewDeliveryCity] = useState('');
+  const [toasts, setToasts] = useState<ToastMessage[]>([]);
+  const [confirmDialog, setConfirmDialog] = useState<ConfirmDialogState | null>(null);
+  const [inputPrompt, setInputPrompt] = useState<InputPromptState | null>(null);
+
+  const pushToast = (text: string, type: ToastMessage['type'] = 'info') => {
+    const id = `toast_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+    setToasts((prev) => [...prev, { id, text, type }]);
+    setTimeout(() => {
+      setToasts((prev) => prev.filter((t) => t.id !== id));
+    }, 4500);
+  };
 
   const deliveryCities: DeliveryCityConfig[] =
     formData.deliveryCities && formData.deliveryCities.length > 0
@@ -198,37 +217,47 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   // SET CUSTOM PIN FOR A USER
   const handleSetCustomUserPin = (user: Customer | Reseller, role: 'customer' | 'reseller') => {
     const defaultPin = getDefaultPinForPhone(user.phone);
-    const input = window.prompt(
-      `نیا 6 ہندسوں کا پن کوڈ درج کریں برائے ${user.name} (${user.phone}):\n(Default: ${defaultPin})`,
-      user.pin || defaultPin
-    );
-    if (input && input.trim()) {
-      const clean = input.trim();
-      if (clean.length < 4) {
-        alert('PIN must be at least 4 digits');
-        return;
-      }
-      if (role === 'customer') {
-        updateCustomerPin(user.id, clean);
-        if (onUpdateCustomer) {
-          onUpdateCustomer({ ...(user as Customer), pin: clean });
+    setInputPrompt({
+      title: 'Set Custom Security PIN',
+      label: `نیا 6 ہندسوں کا پن کوڈ درج کریں برائے ${user.name} (${user.phone}):\n(Default: ${defaultPin})`,
+      initialValue: user.pin || defaultPin,
+      submitLabel: 'Save PIN',
+      onSubmit: (input) => {
+        const clean = input.trim();
+        if (clean.length < 4) {
+          pushToast('PIN must be at least 4 digits.', 'error');
+          return;
         }
-      } else {
-        updateResellerPin(user.id, clean);
-        if (onUpdateReseller) {
-          onUpdateReseller({ ...(user as Reseller), pin: clean });
+        if (role === 'customer') {
+          updateCustomerPin(user.id, clean);
+          if (onUpdateCustomer) {
+            onUpdateCustomer({ ...(user as Customer), pin: clean });
+          }
+        } else {
+          updateResellerPin(user.id, clean);
+          if (onUpdateReseller) {
+            onUpdateReseller({ ...(user as Reseller), pin: clean });
+          }
         }
-      }
-      setUserListNotice(`نیا سیکیورٹی پن کامیابی سے محفوظ ہو گیا: ${clean}`);
-      setTimeout(() => setUserListNotice(null), 4000);
-    }
+        setUserListNotice(`نیا سیکیورٹی پن کامیابی سے محفوظ ہو گیا: ${clean}`);
+        pushToast(`Security PIN updated for ${user.name}.`, 'success');
+        setTimeout(() => setUserListNotice(null), 4000);
+      },
+    });
   };
 
   const handleClearAuditLogs = () => {
-    if (confirm('کیا آپ تمام لاگ ان آڈٹ لاگز صاف کرنا چاہتے ہیں؟\nAre you sure you want to clear login audit history?')) {
-      saveLoginAudits([]);
-      setAuditLogs([]);
-    }
+    setConfirmDialog({
+      title: 'Clear Login Audit History',
+      message: 'کیا آپ تمام لاگ ان آڈٹ لاگز صاف کرنا چاہتے ہیں؟ Are you sure you want to clear login audit history?',
+      confirmLabel: 'Clear Logs',
+      danger: true,
+      onConfirm: () => {
+        saveLoginAudits([]);
+        setAuditLogs([]);
+        pushToast('Login audit history cleared.', 'info');
+      },
+    });
   };
 
   const handleRefreshAuditLogs = () => {
@@ -293,10 +322,10 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
       if (content) {
         const success = importAllDataJSON(content);
         if (success) {
-          alert('Backup restored successfully!');
+          pushToast('Backup restored successfully!', 'success');
           onRefreshAllData();
         } else {
-          alert('Failed to parse backup file. Please ensure it is a valid JSON backup.');
+          pushToast('Failed to parse backup file. Please ensure it is a valid JSON backup.', 'error');
         }
       }
     };
@@ -304,29 +333,31 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   };
 
   const handleResetData = () => {
-    if (
-      confirm(
-        'Are you sure you want to reset all data back to the default 100DAGAR demo dataset with Pakistani channels and bilingual templates?'
-      )
-    ) {
-      resetToDemoData();
-      onRefreshAllData();
-      alert('Data reset to default demo dataset.');
-    }
+    setConfirmDialog({
+      title: 'Reset to Demo Dataset',
+      message: 'Are you sure you want to reset all data back to the default 100DAGAR demo dataset with Pakistani channels and bilingual templates?',
+      confirmLabel: 'Reset Data',
+      danger: true,
+      onConfirm: () => {
+        resetToDemoData();
+        onRefreshAllData();
+        pushToast('Data reset to default demo dataset.', 'info');
+      },
+    });
   };
 
   const handleStartFromScratch = () => {
-    if (
-      confirm(
-        'کیا آپ تمام پرانے ٹرانزیکشنز، آرڈرز اور حاضری کا ڈیٹا صاف کر کے تازہ شروعات کرنا چاہتے ہیں؟\nAre you sure you want to start from scratch?\n\nThis will clear all transactions, COD orders, and attendance records (resetting balances to Rs. 0) so you can test fresh calculations, while keeping your business profile, shipping partner settings, demo item, and reseller settings intact.'
-      )
-    ) {
-      startFromScratchData();
-      onRefreshAllData();
-      alert(
-        'تمام ٹرانزیکشنز اور آرڈرز صاف کر دیے گئے۔ اب آپ نئی انٹریز درج کر سکتے ہیں!\nAll test transactions and orders cleared. System is now fresh and ready for live calculations from scratch.'
-      );
-    }
+    setConfirmDialog({
+      title: 'Start From Scratch',
+      message: 'کیا آپ تمام پرانے ٹرانزیکشنز، آرڈرز اور حاضری کا ڈیٹا صاف کر کے تازہ شروعات کرنا چاہتے ہیں؟\n\nThis will clear all transactions, COD orders, and attendance records (resetting balances to Rs. 0) while keeping your business profile, shipping partner settings, demo item, and reseller settings intact.',
+      confirmLabel: 'Clear & Start Fresh',
+      danger: true,
+      onConfirm: () => {
+        startFromScratchData();
+        onRefreshAllData();
+        pushToast('تمام ٹرانزیکشنز اور آرڈرز صاف کر دیے گئے۔ System is now fresh from scratch.', 'success');
+      },
+    });
   };
 
   return (
@@ -1425,9 +1456,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                           </td>
 
                           <td className="py-2.5 px-3">
-                            {log.role === 'admin' ? (
+                            {log.role === 'admin' || log.role === 'super_admin' ? (
                               <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-900 text-white dark:bg-slate-100 dark:text-slate-900">
-                                Owner / Admin
+                                {log.role === 'super_admin' ? 'Super Admin' : 'Owner / Admin'}
                               </span>
                             ) : log.role === 'reseller' ? (
                               <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300">
@@ -1528,6 +1559,19 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           </div>
         </div>
       )}
+
+      <ToastBanner
+        toasts={toasts}
+        onDismiss={(id) => setToasts((prev) => prev.filter((t) => t.id !== id))}
+      />
+      <ConfirmDialogModal
+        dialog={confirmDialog}
+        onClose={() => setConfirmDialog(null)}
+      />
+      <InputPromptModal
+        promptState={inputPrompt}
+        onClose={() => setInputPrompt(null)}
+      />
     </div>
   );
 };

@@ -17,6 +17,12 @@ import {
 } from 'lucide-react';
 import { BusinessProfile, Reseller } from '../types';
 import { openWhatsAppDirect } from '../utils/whatsapp';
+import {
+  ToastBanner,
+  ToastMessage,
+  InputPromptModal,
+  InputPromptState,
+} from './AppDialogs';
 
 interface ResellersViewProps {
   resellers: Reseller[];
@@ -38,6 +44,16 @@ export const ResellersView: React.FC<ResellersViewProps> = ({
   const [isAddResellerOpen, setIsAddResellerOpen] = useState(false);
   const [editingReseller, setEditingReseller] = useState<Reseller | null>(null);
   const [copiedCode, setCopiedCode] = useState<string | null>(null);
+  const [toasts, setToasts] = useState<ToastMessage[]>([]);
+  const [inputPrompt, setInputPrompt] = useState<InputPromptState | null>(null);
+
+  const pushToast = (text: string, type: ToastMessage['type'] = 'info') => {
+    const id = `toast_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+    setToasts((prev) => [...prev, { id, text, type }]);
+    setTimeout(() => {
+      setToasts((prev) => prev.filter((t) => t.id !== id));
+    }, 4500);
+  };
 
   // New Reseller Form State
   const [name, setName] = useState('');
@@ -104,7 +120,7 @@ export const ResellersView: React.FC<ResellersViewProps> = ({
     setUrduName('');
     setPhone('');
     setAccountTitle('');
-    alert(`نیا ری سیلر ${name} کوڈ #${referralCode} (کریڈٹ لمٹ 25,000 روپے) کے ساتھ رجسٹر ہو گیا ہے!`);
+    pushToast(`نیا ری سیلر ${name} کوڈ #${referralCode} (کریڈٹ لمٹ 25,000 روپے) کے ساتھ رجسٹر ہو گیا ہے!`, 'success');
   };
 
   return (
@@ -325,13 +341,21 @@ export const ResellersView: React.FC<ResellersViewProps> = ({
                 {!isResellerRole && balance > 0 && (
                   <button
                     onClick={() => {
-                      const amountStr = prompt(`Enter commission payout amount for ${r.name} (Max due: Rs. ${balance}):\nPayment Mode: ${r.paymentChannel === 'cash' ? 'Cash at Counter' : r.paymentChannel}`, String(balance));
-                      if (amountStr) {
-                        const amt = parseFloat(amountStr) || 0;
-                        if (amt > 0) {
-                          onPayoutCommission(r.id, amt);
-                        }
-                      }
+                      setInputPrompt({
+                        title: 'Pay Reseller Commission',
+                        label: `Enter commission payout amount for ${r.name} (Max due: Rs. ${balance.toLocaleString('en-PK')}):\nPayment Mode: ${r.paymentChannel === 'cash' ? 'Cash at Counter' : r.paymentChannel}`,
+                        initialValue: String(balance),
+                        inputType: 'number',
+                        submitLabel: 'Confirm Payout',
+                        onSubmit: (amountStr) => {
+                          const amt = parseFloat(amountStr) || 0;
+                          if (amt > 0) {
+                            onPayoutCommission(r.id, amt);
+                          } else {
+                            pushToast('Please enter a valid payout amount greater than 0.', 'error');
+                          }
+                        },
+                      });
                     }}
                     className="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs cursor-pointer shadow-2xs"
                   >
@@ -503,8 +527,9 @@ export const ResellersView: React.FC<ResellersViewProps> = ({
               onSubmit={(e) => {
                 e.preventDefault();
                 onSaveReseller(editingReseller);
+                const savedName = editingReseller.name;
                 setEditingReseller(null);
-                alert(`ری سیلر ${editingReseller.name} کی معلومات کامیابی سے تبدیل ہو گئیں!`);
+                pushToast(`ری سیلر ${savedName} کی معلومات کامیابی سے تبدیل ہو گئیں!`, 'success');
               }}
               className="space-y-4"
             >
@@ -658,6 +683,15 @@ export const ResellersView: React.FC<ResellersViewProps> = ({
           </div>
         </div>
       )}
+
+      <ToastBanner
+        toasts={toasts}
+        onDismiss={(id) => setToasts((prev) => prev.filter((t) => t.id !== id))}
+      />
+      <InputPromptModal
+        promptState={inputPrompt}
+        onClose={() => setInputPrompt(null)}
+      />
     </div>
   );
 };

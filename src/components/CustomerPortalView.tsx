@@ -23,10 +23,11 @@ import {
 } from 'lucide-react';
 import { AppUser, BusinessProfile, Customer, Transaction } from '../types';
 import {
+  createUserAccount,
   getDefaultPinForPhone,
-  getTransactions,
-  saveCustomers,
+  getUserAccounts,
   updateCustomerPin,
+  updateUserAccount,
 } from '../utils/storage';
 import { createPasswordRecord, verifyPassword } from '../utils/security';
 import { openWhatsAppDirect } from '../utils/whatsapp';
@@ -39,6 +40,7 @@ interface CustomerPortalViewProps {
   onLogout: () => void;
   onOpenCart?: () => void;
   onNavigateTab: (tab: string) => void;
+  onPasswordChanged?: () => void;
 }
 
 export const CustomerPortalView: React.FC<CustomerPortalViewProps> = ({
@@ -49,6 +51,7 @@ export const CustomerPortalView: React.FC<CustomerPortalViewProps> = ({
   onLogout,
   onOpenCart,
   onNavigateTab,
+  onPasswordChanged,
 }) => {
   const [activeTab, setActiveTab] = useState<
     'dashboard' | 'orders' | 'reports' | 'payments' | 'security'
@@ -87,51 +90,94 @@ export const CustomerPortalView: React.FC<CustomerPortalViewProps> = ({
     0
   );
 
-  const currentBalance = customer?.balance || Math.max(0, totalPurchases - totalPaid);
+  const currentBalance =
+    customer !== undefined ? customer.balance : Math.max(0, totalPurchases - totalPaid);
 
-  // Handle password change with salted hashing
+  // Handle password change with salted hashing synced across UserAccount + Customer
   const handleChangePassword = async (e: React.FormEvent) => {
     e.preventDefault();
     setSecurityError('');
     setSecuritySuccess('');
     setIsUpdatingPassword(true);
 
-    if (!currentPasswordInput.trim()) {
+    const curPass = currentPasswordInput.trim();
+    const nextPass = newPasswordInput.trim();
+    const confPass = confirmPasswordInput.trim();
+
+    if (!curPass) {
       setSecurityError('Please enter your current password / PIN.');
       setIsUpdatingPassword(false);
       return;
     }
 
-    if (newPasswordInput.trim().length < 4) {
+    if (nextPass.length < 4) {
       setSecurityError('New password must be at least 4 digits/characters long.');
       setIsUpdatingPassword(false);
       return;
     }
 
-    if (newPasswordInput.trim() !== confirmPasswordInput.trim()) {
+    if (nextPass !== confPass) {
       setSecurityError('New password and confirm password do not match.');
       setIsUpdatingPassword(false);
       return;
     }
 
-    // Verify current credentials
+    const userAccounts = getUserAccounts();
+    const cleanUserPhone = (customer?.phone || currentUser.phone || '').replace(/\D/g, '');
+    const matchedUserAcc = userAccounts.find(
+      (u) =>
+        u.id === currentUser.id ||
+        (customer && u.linkedCustomerId === customer.id) ||
+        (u.role === 'customer' && cleanUserPhone && u.phone.replace(/\D/g, '') === cleanUserPhone)
+    );
+
     const defaultPin = getDefaultPinForPhone(customer?.phone || currentUser.phone || '');
     const currentStored = customer?.pin || defaultPin;
 
-    const isMatch = await verifyPassword(currentPasswordInput.trim(), currentStored);
-    if (!isMatch && currentPasswordInput.trim() !== defaultPin) {
+    const isAccMatch = matchedUserAcc
+      ? await verifyPassword(curPass, matchedUserAcc.passwordHash, matchedUserAcc.passwordSalt)
+      : false;
+    const isCustomerPinMatch = await verifyPassword(curPass, currentStored);
+    const isDefaultMatch =
+      !matchedUserAcc?.passwordHash && !customer?.pin && curPass === defaultPin;
+
+    if (!isAccMatch && !isCustomerPinMatch && !isDefaultMatch) {
       setSecurityError('Current password is incorrect. Please check and try again.');
       setIsUpdatingPassword(false);
       return;
     }
 
-    // Hash new password
-    const newPassRecord = await createPasswordRecord(newPasswordInput.trim());
+    const newPassRecord = await createPasswordRecord(nextPass);
 
-    if (customer) {
-      updateCustomerPin(customer.id, newPasswordInput.trim());
+    if (matchedUserAcc) {
+      updateUserAccount(matchedUserAcc.id, {
+        passwordHash: newPassRecord.hash,
+        passwordSalt: newPassRecord.salt,
+        mustChangePassword: false,
+        isTemporaryPassword: false,
+      });
+    } else {
+      createUserAccount({
+        username: (customer?.phone || currentUser.phone || currentUser.id).replace(/[\s-]/g, ''),
+        fullName: customer?.name || currentUser.name,
+        urduName: customer?.urduName || currentUser.urduName,
+        phone: customer?.phone || currentUser.phone || '',
+        email: customer?.email || currentUser.email,
+        role: 'customer',
+        status: 'active',
+        passwordHash: newPassRecord.hash,
+        passwordSalt: newPassRecord.salt,
+        mustChangePassword: false,
+        isTemporaryPassword: false,
+        linkedCustomerId: customer?.id || currentUser.customerId,
+      });
     }
 
+    if (customer) {
+      updateCustomerPin(customer.id, nextPass);
+    }
+
+    onPasswordChanged?.();
     setIsUpdatingPassword(false);
     setCurrentPasswordInput('');
     setNewPasswordInput('');
@@ -456,56 +502,61 @@ export const CustomerPortalView: React.FC<CustomerPortalViewProps> = ({
         </div>
       )}
 
-      {/* 4. PAYMENT INSTRUCTIONS TAB */}
+      {/* 4. PAYMENT INSTRUCTIONS TAB (Account numbers shown strictly on Checkout page) */}
       {activeTab === 'payments' && (
         <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-5 sm:p-6 space-y-5 shadow-xs">
           <div>
             <h3 className="text-sm font-black text-slate-900 dark:text-white uppercase tracking-wider">
-              Official Payment Channels &amp; Settlement (رقم ادائیگی کے ذرائع)
+              Accepted Payment Methods (رقم ادائیگی کے محفوظ ذرائع)
             </h3>
             <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-              Please use the official accounts below for settling your khata balance. Send payment screenshot on WhatsApp after transfer.
+              For security, our unified EasyPaisa / JazzCash / SadaPay account number is revealed exclusively on the Checkout page when placing an order. Cash on Delivery (COD) is also available.
             </p>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-            {/* EasyPaisa */}
             <div className="p-4 rounded-xl border border-emerald-200 dark:border-emerald-800/60 bg-emerald-50/50 dark:bg-emerald-950/20">
               <span className="text-xs font-bold text-emerald-800 dark:text-emerald-300 block">
-                EasyPaisa Account
+                EasyPaisa / JazzCash / SadaPay
               </span>
-              <div className="font-mono text-sm font-black text-slate-900 dark:text-white mt-1">
-                {profile.paymentChannels.easyPaisa.accountNumber}
+              <div className="text-xs font-bold text-slate-900 dark:text-white mt-1.5">
+                Single Unified Wallet Number
               </div>
-              <span className="text-[11px] text-slate-500 dark:text-slate-400 block mt-0.5">
-                Title: {profile.paymentChannels.easyPaisa.accountTitle}
+              <span className="text-[11px] text-slate-500 dark:text-slate-400 block mt-1">
+                Shown securely at Checkout when confirming an order.
               </span>
             </div>
 
-            {/* JazzCash */}
-            <div className="p-4 rounded-xl border border-red-200 dark:border-red-800/60 bg-red-50/50 dark:bg-red-950/20">
-              <span className="text-xs font-bold text-red-800 dark:text-red-300 block">
-                JazzCash Account
+            <div className="p-4 rounded-xl border border-blue-200 dark:border-blue-800/60 bg-blue-50/50 dark:bg-blue-950/20">
+              <span className="text-xs font-bold text-blue-800 dark:text-blue-300 block">
+                Cash on Delivery (COD)
               </span>
-              <div className="font-mono text-sm font-black text-slate-900 dark:text-white mt-1">
-                {profile.paymentChannels.jazzCash.accountNumber}
+              <div className="text-xs font-bold text-slate-900 dark:text-white mt-1.5">
+                Pay Cash to Rider upon Delivery
               </div>
-              <span className="text-[11px] text-slate-500 dark:text-slate-400 block mt-0.5">
-                Title: {profile.paymentChannels.jazzCash.accountTitle}
+              <span className="text-[11px] text-slate-500 dark:text-slate-400 block mt-1">
+                Active for Muzaffarabad &amp; approved delivery cities.
               </span>
             </div>
 
-            {/* SadaPay */}
-            <div className="p-4 rounded-xl border border-cyan-200 dark:border-cyan-800/60 bg-cyan-50/50 dark:bg-cyan-950/20">
-              <span className="text-xs font-bold text-cyan-800 dark:text-cyan-300 block">
-                SadaPay / IBAN
-              </span>
-              <div className="font-mono text-sm font-black text-slate-900 dark:text-white mt-1">
-                {profile.paymentChannels.sadaPay.accountNumber}
+            <div className="p-4 rounded-xl border border-amber-200 dark:border-amber-800/60 bg-amber-50/50 dark:bg-amber-950/20 flex flex-col justify-between">
+              <div>
+                <span className="text-xs font-bold text-amber-800 dark:text-amber-300 block">
+                  Ready to Place an Order?
+                </span>
+                <span className="text-[11px] text-slate-500 dark:text-slate-400 block mt-1">
+                  Proceed to Checkout from your cart to view full payment details.
+                </span>
               </div>
-              <span className="text-[11px] text-slate-500 dark:text-slate-400 block mt-0.5">
-                SadaTag: {profile.paymentChannels.sadaPay.sadaTag}
-              </span>
+              {onOpenCart && (
+                <button
+                  type="button"
+                  onClick={onOpenCart}
+                  className="mt-3 px-3 py-1.5 bg-amber-500 hover:bg-amber-400 text-slate-950 font-black text-xs rounded-lg cursor-pointer self-start"
+                >
+                  Open Cart &amp; Checkout
+                </button>
+              )}
             </div>
           </div>
         </div>

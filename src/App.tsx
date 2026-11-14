@@ -116,6 +116,14 @@ import { CategoryManagementModal } from './components/CategoryManagementModal';
 import { BranchManagementView } from './components/BranchManagementView';
 import { WalkInSalesView } from './components/WalkInSalesView';
 import { ProductImporterModal } from './components/ProductImporterModal';
+import {
+  ToastBanner,
+  ToastMessage,
+  ConfirmDialogModal,
+  ConfirmDialogState,
+  InputPromptModal,
+  InputPromptState,
+} from './components/AppDialogs';
 
 export default function App() {
   // Main Data States
@@ -251,6 +259,25 @@ export default function App() {
   const [invoiceModalTx, setInvoiceModalTx] = useState<Transaction | null>(null);
   const [invoiceModalCustomer, setInvoiceModalCustomer] = useState<Customer | null>(null);
 
+  const [toasts, setToasts] = useState<ToastMessage[]>([]);
+  const [confirmDialog, setConfirmDialog] = useState<ConfirmDialogState | null>(null);
+  const [inputPrompt, setInputPrompt] = useState<InputPromptState | null>(null);
+
+  const pushToast = useCallback(
+    (text: string, type: ToastMessage['type'] = 'info') => {
+      const id = `toast_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+      setToasts((prev) => [...prev, { id, text, type }]);
+      setTimeout(() => {
+        setToasts((prev) => prev.filter((t) => t.id !== id));
+      }, 4500);
+    },
+    []
+  );
+
+  const dismissToast = useCallback((id: string) => {
+    setToasts((prev) => prev.filter((t) => t.id !== id));
+  }, []);
+
   // Synchronize Dark Mode with Document Root
   useEffect(() => {
     if (darkMode) {
@@ -361,14 +388,23 @@ export default function App() {
   };
 
   // CART HANDLERS
-  const handleAddToCart = (product: ProductItem, qty: number = 1) => {
-    const existing = cart.find((it) => it.product.id === product.id);
+  const handleAddToCart = (product: ProductItem, qty: number = 1, selectedSize?: string) => {
+    const resolvedSize = selectedSize || product.selectedSize || '';
+    const productWithSize = resolvedSize ? { ...product, selectedSize: resolvedSize } : product;
+    const existing = cart.find(
+      (it) =>
+        it.product.id === product.id &&
+        (it.product.selectedSize || '') === resolvedSize &&
+        it.unitPrice === product.ourPrice
+    );
     const unitSavings = Math.max(0, product.marketPrice - product.ourPrice);
 
     if (existing) {
       const updatedQty = existing.quantity + qty;
       const updated = cart.map((it) =>
-        it.product.id === product.id
+        it.product.id === product.id &&
+        (it.product.selectedSize || '') === resolvedSize &&
+        it.unitPrice === product.ourPrice
           ? {
               ...it,
               quantity: updatedQty,
@@ -380,7 +416,7 @@ export default function App() {
       setCart(updated);
     } else {
       const newItem: CartItem = {
-        product,
+        product: productWithSize,
         quantity: qty,
         unitPrice: product.ourPrice,
         marketPrice: product.marketPrice,
@@ -393,12 +429,14 @@ export default function App() {
   };
 
   const handleUpdateCartQty = (productId: string, qty: number) => {
+    const targetIdx = cart.findIndex((it) => it.product.id === productId);
+    if (targetIdx === -1) return;
     if (qty <= 0) {
-      handleRemoveFromCart(productId);
+      setCart(cart.filter((_, idx) => idx !== targetIdx));
       return;
     }
-    const updated = cart.map((it) =>
-      it.product.id === productId
+    const updated = cart.map((it, idx) =>
+      idx === targetIdx
         ? {
             ...it,
             quantity: qty,
@@ -468,7 +506,7 @@ export default function App() {
 
     const txItems = cart.map((it) => ({
       productId: it.product.id,
-      description: it.product.name,
+      description: `${it.product.name}${it.product.selectedSize ? ` (${it.product.selectedSize})` : ''}`,
       quantity: it.quantity,
       unitPrice: it.unitPrice,
       marketPrice: it.marketPrice,
@@ -553,21 +591,22 @@ export default function App() {
     const updatedTxs = [newTx, ...transactions];
     syncTransactionsAndBalances(updatedTxs, activeCustomers);
 
-    // 2. Decrement Product Stock and Increment Sales Count
+    // 2. Decrement Product Stock and Increment Sales Count (summing all variants of same product)
     const updatedProducts = products.map((p) => {
-      const cartItem = cart.find((c) => c.product.id === p.id);
-      if (cartItem) {
-        const newStock = Math.max(0, p.stockQty - cartItem.quantity);
-        const newSales = p.salesCount + cartItem.quantity;
-        const newRevenue = p.totalRevenue + cartItem.totalAmount;
-        const unitProfit = p.ourPrice - p.costPrice;
-        const newProfit = p.totalProfit + unitProfit * cartItem.quantity;
+      const matchingItems = cart.filter((c) => c.product.id === p.id);
+      if (matchingItems.length > 0) {
+        const totalQty = matchingItems.reduce((sum, c) => sum + c.quantity, 0);
+        const totalRev = matchingItems.reduce((sum, c) => sum + c.totalAmount, 0);
+        const totalProf = matchingItems.reduce(
+          (sum, c) => sum + (c.unitPrice - p.costPrice) * c.quantity,
+          0
+        );
         return {
           ...p,
-          stockQty: newStock,
-          salesCount: newSales,
-          totalRevenue: newRevenue,
-          totalProfit: newProfit,
+          stockQty: Math.max(0, p.stockQty - totalQty),
+          salesCount: p.salesCount + totalQty,
+          totalRevenue: p.totalRevenue + totalRev,
+          totalProfit: p.totalProfit + totalProf,
         };
       }
       return p;
@@ -635,8 +674,9 @@ export default function App() {
       saveWhatsAppNotifications(updatedNotifs);
     }
 
-    alert(
-      `کامیابی سے بل #${invoiceNumber} بنام ${customer?.name || 'کسٹمر'} درج کر لیا گیا!\nSale confirmed. Customer savings: ${profile.currencySymbol}${totalSavings.toLocaleString('en-PK')}. Stock updated.`
+    pushToast(
+      `کامیابی سے بل #${invoiceNumber} بنام ${customer?.name || 'کسٹمر'} درج کر لیا گیا! Customer savings: ${profile.currencySymbol}${totalSavings.toLocaleString('en-PK')}. Stock updated.`,
+      'success'
     );
   };
 
@@ -669,9 +709,15 @@ export default function App() {
         // Record payment in ledger and calculate net cash
         if (newStatus === 'delivered' && wasNotDelivered) {
           const netCash = ord.totalAmount - ord.deliveryFee;
+          const cleanOrdPhone = (ord.phone || '').replace(/\D/g, '');
+          const matchedCust =
+            (ord.customerId && customers.find((c) => c.id === ord.customerId)) ||
+            (cleanOrdPhone &&
+              customers.find((c) => c.phone.replace(/\D/g, '') === cleanOrdPhone)) ||
+            undefined;
           const debitTx: Transaction = {
             id: `tx_cod_deliv_${Date.now()}`,
-            customerId: ord.customerId || customers[0]?.id || 'cust_1',
+            customerId: matchedCust?.id || ord.customerId || '',
             type: 'debit',
             amount: ord.totalAmount,
             date: todayStr,
@@ -773,19 +819,17 @@ export default function App() {
   };
 
   const handleDeleteEmployee = (empId: string) => {
-    if (confirm('Are you sure you want to remove this employee record?')) {
-      const updated = employees.filter((e) => e.id !== empId);
-      setEmployees(updated);
-      saveEmployees(updated);
-    }
+    const updated = employees.filter((e) => e.id !== empId);
+    setEmployees(updated);
+    saveEmployees(updated);
+    pushToast('Employee record removed.', 'info');
   };
 
   const handleDeleteAttendance = (recId: string) => {
-    if (confirm('Delete this attendance entry?')) {
-      const updated = attendance.filter((a) => a.id !== recId);
-      setAttendance(updated);
-      saveAttendance(updated);
-    }
+    const updated = attendance.filter((a) => a.id !== recId);
+    setAttendance(updated);
+    saveAttendance(updated);
+    pushToast('Attendance entry deleted.', 'info');
   };
 
   // RESELLER ACCOUNTS HANDLERS
@@ -802,7 +846,7 @@ export default function App() {
     );
     setResellers(updated);
     saveResellers(updated);
-    alert(`کامیابی سے رقم Rs. ${amount.toLocaleString('en-PK')} کمیشن واؤچر جاری کر دیا گیا!`);
+    pushToast(`کامیابی سے رقم Rs. ${amount.toLocaleString('en-PK')} کمیشن واؤچر جاری کر دیا گیا!`, 'success');
   };
 
   // USER ROLE SELECTION & LOGIN HANDLER
@@ -871,9 +915,10 @@ export default function App() {
 
     if (newRole === 'customer') {
       setViewMode('customer');
+      const latestCustomers = getCustomers();
       if (userDetails?.customerId && userDetails?.phone && userDetails.phone !== '03125256266') {
         const cleanPhone = userDetails.phone.replace(/\D/g, '');
-        const exists = customers.some(
+        const exists = latestCustomers.some(
           (c) => c.id === userDetails.customerId || c.phone.replace(/\D/g, '') === cleanPhone
         );
         if (!exists) {
@@ -889,13 +934,17 @@ export default function App() {
             creditLimit: 5000,
             paymentTermsDays: 7,
             status: 'active',
-            pin: getDefaultPinForPhone(userDetails.phone),
+            pin: userDetails.hasDefaultPin === false ? undefined : getDefaultPinForPhone(userDetails.phone),
             createdAt: new Date().toISOString(),
           };
-          const updatedCusts = [newCustRecord, ...customers];
+          const updatedCusts = [newCustRecord, ...latestCustomers];
           setCustomers(updatedCusts);
           saveCustomers(updatedCusts);
+        } else {
+          setCustomers(latestCustomers);
         }
+      } else {
+        setCustomers(latestCustomers);
       }
       setCurrentTab(updatedUser.isAuthenticated ? 'customer_portal' : 'store');
     } else if (newRole === 'investor') {
@@ -933,6 +982,7 @@ export default function App() {
     }
     setProducts(updated);
     saveProducts(updated);
+    pushToast(`Product "${product.name}" saved to catalog.`, 'success');
   };
 
   const handleUpdateStock = (productId: string, newStock: number) => {
@@ -952,11 +1002,19 @@ export default function App() {
   };
 
   const handleDeleteProduct = (productId: string) => {
-    if (confirm('Delete this product from catalog?')) {
-      const updated = products.filter((p) => p.id !== productId);
-      setProducts(updated);
-      saveProducts(updated);
-    }
+    const prod = products.find((p) => p.id === productId);
+    setConfirmDialog({
+      title: 'Delete Product',
+      message: `Are you sure you want to remove "${prod?.name || 'this product'}" from catalog?`,
+      confirmLabel: 'Delete',
+      danger: true,
+      onConfirm: () => {
+        const updated = products.filter((p) => p.id !== productId);
+        setProducts(updated);
+        saveProducts(updated);
+        pushToast('Product removed from catalog.', 'info');
+      },
+    });
   };
 
   // PAYMENT TERMS AUTOMATION ENGINE TRIGGER
@@ -964,7 +1022,10 @@ export default function App() {
     const newNotifs = generatePaymentTermsAlertsBatch(transactions, customers, profile, templates);
 
     if (newNotifs.length === 0) {
-      alert('تمام ادھار کھاتے اپ ٹو ڈیٹ ہیں۔ فی الوقت ۳ روزہ نرم یاددہانی یا تاریخ ادائیگی کا کوئی الرٹ واجب نہیں ہے۔\nAll payment terms are up to date. No new 3-day alerts due today.');
+      pushToast(
+        'تمام ادھار کھاتے اپ ٹو ڈیٹ ہیں۔ All payment terms are up to date. No new 3-day alerts due today.',
+        'info'
+      );
       return;
     }
 
@@ -972,8 +1033,9 @@ export default function App() {
     setNotifications(updatedNotifs);
     saveWhatsAppNotifications(updatedNotifs);
 
-    alert(
-      `۳ روزہ ادائیگی الرٹ سسٹم: کل ${newNotifs.length} کسٹمرز کے لیے پیغامات کیو میں شامل کر دیے گئے ہیں!\nQueued ${newNotifs.length} payment terms alerts (3 days soft notices & overdue cycle).`
+    pushToast(
+      `۳ روزہ ادائیگی الرٹ سسٹم: Queued ${newNotifs.length} payment terms alerts (3 days soft notices & overdue cycle).`,
+      'success'
     );
   };
 
@@ -1006,73 +1068,85 @@ export default function App() {
 
   const handleSettleTermsPayment = (tx: Transaction, customer: Customer) => {
     const unpaid = tx.dueBalance !== undefined ? tx.dueBalance : tx.amount;
-    const amountToSettle = prompt(
-      `Enter payment amount received from ${customer.name} (Current Due: Rs. ${unpaid.toLocaleString('en-PK')}):`,
-      String(unpaid)
-    );
-    if (!amountToSettle) return;
+    const staffLabel =
+      activeRole === 'admin' || activeRole === 'super_admin'
+        ? currentUser.name || 'Super Admin'
+        : currentUser.name || 'Store Staff';
 
-    const settledNum = parseFloat(amountToSettle) || 0;
-    if (settledNum <= 0) return;
+    setInputPrompt({
+      title: 'Settle Terms Payment',
+      label: `Enter payment amount received from ${customer.name} (Current Due: Rs. ${unpaid.toLocaleString('en-PK')}):`,
+      initialValue: String(unpaid),
+      inputType: 'number',
+      submitLabel: 'Record Payment',
+      onSubmit: (amountToSettle) => {
+        const settledNum = parseFloat(amountToSettle) || 0;
+        if (settledNum <= 0) {
+          pushToast('Please enter a valid payment amount greater than 0.', 'error');
+          return;
+        }
 
-    // 1. Create debit recovery transaction with audit trail
-    const debitTx: Transaction = {
-      id: `tx_recov_${Date.now()}`,
-      customerId: customer.id,
-      type: 'debit',
-      amount: settledNum,
-      date: todayStr,
-      notes: `Payment receipt against Invoice #${tx.invoiceNumber || 'INV'}`,
-      paymentMode: 'easypaisa',
-      status: 'completed',
-      responsibleStaff: activeRole === 'admin' ? 'Super Admin' : currentUser.name || 'Store Staff',
-      auditTrail: [
-        {
-          id: `audit_deb_${Date.now()}`,
-          timestamp: new Date().toISOString(),
-          action: 'created',
-          newStatus: 'completed',
-          newAmount: settledNum,
-          changedBy: activeRole === 'admin' ? 'Super Admin' : currentUser.name || 'Store Staff',
-          notes: `Payment receipt recorded against invoice #${tx.invoiceNumber || 'INV'}`,
-        },
-      ],
-      createdAt: new Date().toISOString(),
-    };
-
-    // 2. Update original credit transaction due balance and append audit entry without overwriting
-    const updatedTxs: Transaction[] = transactions.map((t) => {
-      if (t.id === tx.id) {
-        const curDue = t.dueBalance !== undefined ? t.dueBalance : t.amount;
-        const curPaid = t.paidAmount || 0;
-        const newDue = Math.max(0, curDue - settledNum);
-        const newStatus: 'completed' | 'partially_paid' = newDue === 0 ? 'completed' : 'partially_paid';
-        const prevAudit = t.auditTrail || [];
-        const auditLog: TransactionAuditEntry = {
-          id: `audit_pay_${Date.now()}`,
-          timestamp: new Date().toISOString(),
-          action: 'payment_received',
-          previousStatus: t.status || 'pending',
-          newStatus,
-          previousAmount: curDue,
-          newAmount: newDue,
-          changedBy: activeRole === 'admin' ? 'Super Admin' : currentUser.name || 'Store Staff',
-          notes: `Payment of Rs. ${settledNum.toLocaleString('en-PK')} recorded. Balance now: Rs. ${newDue.toLocaleString('en-PK')}`,
+        const debitTx: Transaction = {
+          id: `tx_recov_${Date.now()}`,
+          customerId: customer.id,
+          type: 'debit',
+          amount: settledNum,
+          date: todayStr,
+          notes: `Payment receipt against Invoice #${tx.invoiceNumber || 'INV'}`,
+          paymentMode: 'easypaisa',
+          status: 'completed',
+          responsibleStaff: staffLabel,
+          auditTrail: [
+            {
+              id: `audit_deb_${Date.now()}`,
+              timestamp: new Date().toISOString(),
+              action: 'created',
+              newStatus: 'completed',
+              newAmount: settledNum,
+              changedBy: staffLabel,
+              notes: `Payment receipt recorded against invoice #${tx.invoiceNumber || 'INV'}`,
+            },
+          ],
+          createdAt: new Date().toISOString(),
         };
-        return {
-          ...t,
-          dueBalance: newDue,
-          paidAmount: curPaid + settledNum,
-          status: newStatus,
-          auditTrail: [auditLog, ...prevAudit],
-        };
-      }
-      return t;
+
+        const updatedTxs: Transaction[] = transactions.map((t) => {
+          if (t.id === tx.id) {
+            const curDue = t.dueBalance !== undefined ? t.dueBalance : t.amount;
+            const curPaid = t.paidAmount || 0;
+            const newDue = Math.max(0, curDue - settledNum);
+            const newStatus: 'completed' | 'partially_paid' =
+              newDue === 0 ? 'completed' : 'partially_paid';
+            const prevAudit = t.auditTrail || [];
+            const auditLog: TransactionAuditEntry = {
+              id: `audit_pay_${Date.now()}`,
+              timestamp: new Date().toISOString(),
+              action: 'payment_received',
+              previousStatus: t.status || 'pending',
+              newStatus,
+              previousAmount: curDue,
+              newAmount: newDue,
+              changedBy: staffLabel,
+              notes: `Payment of Rs. ${settledNum.toLocaleString('en-PK')} recorded. Balance now: Rs. ${newDue.toLocaleString('en-PK')}`,
+            };
+            return {
+              ...t,
+              dueBalance: newDue,
+              paidAmount: curPaid + settledNum,
+              status: newStatus,
+              auditTrail: [auditLog, ...prevAudit],
+            };
+          }
+          return t;
+        });
+
+        syncTransactionsAndBalances([debitTx, ...updatedTxs], customers);
+        pushToast(
+          `Received Rs. ${settledNum.toLocaleString('en-PK')} from ${customer.name}. Ledger updated!`,
+          'success'
+        );
+      },
     });
-
-    syncTransactionsAndBalances([debitTx, ...updatedTxs], customers);
-
-    alert(`Received Rs. ${settledNum.toLocaleString('en-PK')} from ${customer.name}. Ledger updated!`);
   };
 
   // LUCKY DRAW HANDLERS
@@ -1118,7 +1192,11 @@ export default function App() {
           action: 'status_updated' as const,
           previousStatus: t.status || 'pending',
           newStatus,
-          changedBy: staff || (activeRole === 'admin' ? 'Super Admin' : currentUser.name || 'Store Staff'),
+          changedBy:
+            staff ||
+            (activeRole === 'admin' || activeRole === 'super_admin'
+              ? currentUser.name || 'Super Admin'
+              : currentUser.name || 'Store Staff'),
           notes: notes || 'Status updated from date-wise ledger',
         };
         const prevAudit = t.auditTrail || [];
@@ -1147,7 +1225,10 @@ export default function App() {
         : txData.paidAmount && txData.paidAmount > 0
         ? 'partially_paid'
         : 'pending');
-    const staffName = activeRole === 'admin' ? 'Super Admin' : currentUser.name || 'Store Staff';
+    const staffName =
+      activeRole === 'admin' || activeRole === 'super_admin'
+        ? currentUser.name || 'Super Admin'
+        : currentUser.name || 'Store Staff';
 
     const newTx: Transaction = {
       ...txData,
@@ -1275,7 +1356,10 @@ export default function App() {
     const result = runRecurringInvoicesCheck(recurringInvoices, customers, profile, templates);
 
     if (result.generatedInvoicesCount === 0) {
-      alert('تمام مقررہ بلنگ شیڈول اپ ٹو ڈیٹ ہیں۔ فی الوقت کوئی بل واجب نہیں ہے۔\nAll recurring billing profiles are up to date.');
+      pushToast(
+        'تمام مقررہ بلنگ شیڈول اپ ٹو ڈیٹ ہیں۔ All recurring billing profiles are up to date.',
+        'info'
+      );
       return;
     }
 
@@ -1291,8 +1375,9 @@ export default function App() {
       saveWhatsAppNotifications(updatedNotifs);
     }
 
-    alert(
-      `کامیابی کے ساتھ ${result.generatedInvoicesCount} نئے مقررہ بل تیار کر دیے گئے!\nSuccessfully generated ${result.generatedInvoicesCount} recurring credit invoices.`
+    pushToast(
+      `Successfully generated ${result.generatedInvoicesCount} recurring credit invoices.`,
+      'success'
     );
   };
 
@@ -1305,11 +1390,18 @@ export default function App() {
   };
 
   const handleDeleteRecurring = (id: string) => {
-    if (confirm('اس مقررہ بلنگ شیڈول کو خارج کریں؟ Delete schedule?')) {
-      const updated = recurringInvoices.filter((r) => r.id !== id);
-      setRecurringInvoices(updated);
-      saveRecurringInvoices(updated);
-    }
+    setConfirmDialog({
+      title: 'Delete Recurring Schedule',
+      message: 'اس مقررہ بلنگ شیڈول کو خارج کریں؟ Delete this recurring billing schedule?',
+      confirmLabel: 'Delete',
+      danger: true,
+      onConfirm: () => {
+        const updated = recurringInvoices.filter((r) => r.id !== id);
+        setRecurringInvoices(updated);
+        saveRecurringInvoices(updated);
+        pushToast('Recurring schedule deleted.', 'info');
+      },
+    });
   };
 
   // OPEN MODALS
@@ -1446,6 +1538,17 @@ export default function App() {
             onLogout={handleLogout}
             onOpenCart={() => setIsCheckoutOpen(true)}
             onNavigateTab={handleTabChange}
+            onPasswordChanged={() => {
+              const updatedUser: AppUser = {
+                ...currentUser,
+                mustChangePassword: false,
+                hasDefaultPin: false,
+              };
+              setCurrentUser(updatedUser);
+              saveCurrentUser(updatedUser);
+              setCustomers(getCustomers());
+              pushToast('Password changed successfully.', 'success');
+            }}
           />
         )}
 
@@ -1600,9 +1703,9 @@ export default function App() {
                 setNotifications(updated);
                 saveWhatsAppNotifications(updated);
                 setCurrentTab('whatsapp');
-                alert(`Queued monthly statements for ${newNotifs.length} customers.`);
+                pushToast(`Queued monthly statements for ${newNotifs.length} customers.`, 'success');
               } else {
-                alert('All customer accounts are clear!');
+                pushToast('All customer accounts are clear!', 'info');
               }
             }}
             onRunWeeklyDueReminders={() => {
@@ -1612,9 +1715,9 @@ export default function App() {
                 setNotifications(updated);
                 saveWhatsAppNotifications(updated);
                 setCurrentTab('whatsapp');
-                alert(`Queued weekly due reminders for ${newNotifs.length} customers.`);
+                pushToast(`Queued weekly due reminders for ${newNotifs.length} customers.`, 'success');
               } else {
-                alert('All accounts are clear!');
+                pushToast('All accounts are clear!', 'info');
               }
             }}
             onOpenProductBroadcast={() => setIsProductBroadcastOpen(true)}
@@ -1642,10 +1745,17 @@ export default function App() {
             onOpenScheduleWhatsApp={openScheduleWhatsApp}
             onOpenInvoiceModal={openInvoiceModal}
             onDeleteTransaction={(txId) => {
-              if (confirm('Delete transaction?')) {
-                const updated = transactions.filter((t) => t.id !== txId);
-                syncTransactionsAndBalances(updated, customers);
-              }
+              setConfirmDialog({
+                title: 'Delete Transaction',
+                message: 'Are you sure you want to permanently delete this ledger transaction?',
+                confirmLabel: 'Delete',
+                danger: true,
+                onConfirm: () => {
+                  const updated = transactions.filter((t) => t.id !== txId);
+                  syncTransactionsAndBalances(updated, customers);
+                  pushToast('Transaction deleted.', 'info');
+                },
+              });
             }}
           />
         )}
@@ -1662,7 +1772,7 @@ export default function App() {
             onToggleStatus={handleToggleRecurringStatus}
             onDeleteRecurring={handleDeleteRecurring}
             onTriggerSingleRecurring={(rec) => {
-              alert(`Contract ${rec.title} triggered.`);
+              pushToast(`Contract ${rec.title} triggered.`, 'success');
             }}
             onOpenInvoiceModal={openInvoiceModal}
           />
@@ -1702,7 +1812,9 @@ export default function App() {
                 const updated = [...newNotifs, ...notifications];
                 setNotifications(updated);
                 saveWhatsAppNotifications(updated);
-                alert(`Re-queued broadcast to ${newNotifs.length} matching recipients!`);
+                pushToast(`Re-queued broadcast to ${newNotifs.length} matching recipients!`, 'success');
+              } else {
+                pushToast('No matching recipients found for this saved campaign.', 'warning');
               }
             }}
             onRunWeeklyDueReminders={() => {
@@ -1949,9 +2061,9 @@ export default function App() {
               handleSaveBroadcastCampaign(campaign);
             }
 
-            alert(`Queued broadcast to ${newNotifs.length} matching recipients (Customers & Leads)!`);
+            pushToast(`Queued broadcast to ${newNotifs.length} matching recipients (Customers & Leads)!`, 'success');
           } else {
-            alert('No matching customers or manual contacts found with these segmentation filters.');
+            pushToast('No matching customers or manual contacts found with these segmentation filters.', 'warning');
           }
           setIsProductBroadcastOpen(false);
         }}
@@ -1986,6 +2098,17 @@ export default function App() {
         onClose={() => setIsWebsiteImportModalOpen(false)}
         existingProducts={products}
         onSaveProduct={handleSaveProduct}
+      />
+
+      {/* GLOBAL NON-BLOCKING TOASTS, CONFIRMATIONS & PROMPTS */}
+      <ToastBanner toasts={toasts} onDismiss={dismissToast} />
+      <ConfirmDialogModal
+        dialog={confirmDialog}
+        onClose={() => setConfirmDialog(null)}
+      />
+      <InputPromptModal
+        promptState={inputPrompt}
+        onClose={() => setInputPrompt(null)}
       />
     </div>
   );

@@ -49,11 +49,11 @@ export const TransactionHistoryView: React.FC<TransactionHistoryViewProps> = ({
   onUpdateTransactionStatus,
 }) => {
   const isCustomer = userRole === 'customer';
-  const isAdmin = userRole === 'admin';
+  const isAdmin = userRole === 'admin' || userRole === 'super_admin';
 
-  // Find active customer if in customer role
+  // Find active customer if in customer role (strict boundary: never fall back to another customer)
   const matchedCustomer = useMemo(() => {
-    if (!currentUser) return customers[0] || null;
+    if (!currentUser) return isCustomer ? null : customers[0] || null;
     if (currentUser.customerId) {
       const found = customers.find((c) => c.id === currentUser.customerId);
       if (found) return found;
@@ -63,8 +63,8 @@ export const TransactionHistoryView: React.FC<TransactionHistoryViewProps> = ({
       const found = customers.find((c) => c.phone.replace(/\D/g, '') === cleanPhone);
       if (found) return found;
     }
-    return customers[0] || null;
-  }, [customers, currentUser]);
+    return isCustomer ? null : customers[0] || null;
+  }, [customers, currentUser, isCustomer]);
 
   // Date filters
   const [dateFilter, setDateFilter] = useState<'all' | 'today' | 'this_week' | 'this_month' | 'last_month' | 'custom'>('this_month');

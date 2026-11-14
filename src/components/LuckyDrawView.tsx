@@ -302,8 +302,8 @@ export const LuckyDrawView: React.FC<LuckyDrawViewProps> = ({
               <span className="text-[11px] font-black tracking-wider text-[#FFD200]">
                 100DAGAR
               </span>
-              <span className="text-[8px] font-urdu font-medium text-white -mt-0.5">
-                مدینہ مارکیٹ
+              <span className="text-[7px] font-bold tracking-wider uppercase text-white -mt-0.5">
+                WE BUY WE SELL
               </span>
               {!isCustomerView && (
                 <span className="text-[7px] text-amber-300 font-bold uppercase mt-0.5">

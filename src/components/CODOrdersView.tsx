@@ -36,6 +36,12 @@ import {
 import { openWhatsAppDirect } from '../utils/whatsapp';
 import { getWasalSettlements, saveWasalSettlements } from '../utils/storage';
 import { defaultDeliveryCities } from '../utils/defaultData';
+import {
+  ToastBanner,
+  ToastMessage,
+  ConfirmDialogModal,
+  ConfirmDialogState,
+} from './AppDialogs';
 
 interface CODOrdersViewProps {
   orders: CODOrder[];
@@ -78,6 +84,20 @@ export const CODOrdersView: React.FC<CODOrdersViewProps> = ({
   const [isAddOrderOpen, setIsAddOrderOpen] = useState(false);
   const [selectedOrderForPrint, setSelectedOrderForPrint] = useState<CODOrder | null>(null);
   const [feedbackNotice, setFeedbackNotice] = useState<string | null>(null);
+  const [toasts, setToasts] = useState<ToastMessage[]>([]);
+  const [confirmDialog, setConfirmDialog] = useState<ConfirmDialogState | null>(null);
+  const [dispatchTarget, setDispatchTarget] = useState<CODOrder | null>(null);
+  const [dispatchCourier, setDispatchCourier] = useState<string>('WASAL delivery');
+  const [dispatchTracking, setDispatchTracking] = useState<string>('');
+  const [createOrderError, setCreateOrderError] = useState<string | null>(null);
+
+  const pushToast = (text: string, type: ToastMessage['type'] = 'info') => {
+    const id = `toast_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+    setToasts((prev) => [...prev, { id, text, type }]);
+    setTimeout(() => {
+      setToasts((prev) => prev.filter((t) => t.id !== id));
+    }, 4500);
+  };
 
   // WASAL Separation Daybook state
   const [wasalDateFilter, setWasalDateFilter] = useState<string>(''); // '' = All Dates
@@ -181,7 +201,10 @@ export const CODOrdersView: React.FC<CODOrdersViewProps> = ({
     setIsSyncingShipday(true);
     setTimeout(() => {
       setIsSyncingShipday(false);
-      alert(`✅ Shipday API Synced!\nCarrier: ${shipperName}\nKey: ${profile.shippingPartner?.apiKey || 'SHIPDAY_API_KEY_LIVE_100D'}\nStatus: Active. Orders and dispatches are up to date.`);
+      pushToast(
+        `Shipday API Synced! Carrier: ${shipperName} · Key: ${profile.shippingPartner?.apiKey || 'SHIPDAY_API_KEY_LIVE_100D'} · Status: Active.`,
+        'success'
+      );
     }, 900);
   };
 
@@ -220,9 +243,11 @@ export const CODOrdersView: React.FC<CODOrdersViewProps> = ({
 
   const handleCreateOrder = (e: React.FormEvent) => {
     e.preventDefault();
+    setCreateOrderError(null);
     const prod = products.find((p) => p.id === newProductId) || products[0];
     if (!prod) {
-      alert('Please select a valid product.');
+      setCreateOrderError('Please select a valid product.');
+      pushToast('Please select a valid product.', 'error');
       return;
     }
 
@@ -267,7 +292,10 @@ export const CODOrdersView: React.FC<CODOrdersViewProps> = ({
     setNewPhone('');
     setNewAddress('');
     setNewTracking('');
-    alert(`نیا کیش آن ڈلیوری آرڈر #${newOrder.orderNumber} درج کر لیا گیا!\nOrder created. Ready for dispatch.`);
+    pushToast(
+      `نیا کیش آن ڈلیوری آرڈر #${newOrder.orderNumber} درج کر لیا گیا! Order created & ready for dispatch.`,
+      'success'
+    );
   };
 
   const handleSendDispatchWhatsApp = (order: CODOrder) => {
@@ -971,9 +999,9 @@ export const CODOrdersView: React.FC<CODOrdersViewProps> = ({
                     {isPending && (
                       <button
                         onClick={() => {
-                          const courier = prompt('Select Courier (Trax / TCS / Leopards / Rider):', order.courierPartner) || order.courierPartner;
-                          const tracking = prompt('Enter Tracking Number / Consignment #:', order.trackingNumber || '') || order.trackingNumber;
-                          onUpdateOrderStatus(order.id, 'dispatched', { courierPartner: courier as any, trackingNumber: tracking });
+                          setDispatchCourier(order.courierPartner || 'WASAL delivery');
+                          setDispatchTracking(order.trackingNumber || '');
+                          setDispatchTarget(order);
                         }}
                         className="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold text-xs cursor-pointer transition-colors"
                       >
@@ -985,9 +1013,15 @@ export const CODOrdersView: React.FC<CODOrdersViewProps> = ({
                       <>
                         <button
                           onClick={() => {
-                            if (confirm(`Confirm Delivery for #${order.orderNumber}?\nTotal Cash ${profile.currencySymbol}${order.totalAmount} will be auto-credited to ledger and reseller commission credited.`)) {
-                              onUpdateOrderStatus(order.id, 'delivered');
-                            }
+                            setConfirmDialog({
+                              title: `Confirm Delivery #${order.orderNumber}`,
+                              message: `Total Cash ${profile.currencySymbol}${order.totalAmount.toLocaleString('en-PK')} will be auto-credited to ledger and reseller commission credited.`,
+                              confirmLabel: 'Mark Delivered',
+                              onConfirm: () => {
+                                onUpdateOrderStatus(order.id, 'delivered');
+                                pushToast(`Order #${order.orderNumber} marked delivered.`, 'success');
+                              },
+                            });
                           }}
                           className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg font-bold text-xs cursor-pointer transition-colors flex items-center gap-1"
                         >
@@ -997,9 +1031,16 @@ export const CODOrdersView: React.FC<CODOrdersViewProps> = ({
 
                         <button
                           onClick={() => {
-                            if (confirm(`Mark #${order.orderNumber} as RETURNED?\nStock will be automatically restored to inventory.`)) {
-                              onUpdateOrderStatus(order.id, 'returned');
-                            }
+                            setConfirmDialog({
+                              title: `Mark Returned #${order.orderNumber}`,
+                              message: `Mark #${order.orderNumber} as RETURNED?\nStock will be automatically restored to inventory.`,
+                              confirmLabel: 'Mark Returned',
+                              danger: true,
+                              onConfirm: () => {
+                                onUpdateOrderStatus(order.id, 'returned');
+                                pushToast(`Order #${order.orderNumber} marked returned & stock restored.`, 'info');
+                              },
+                            });
                           }}
                           className="px-3 py-1.5 bg-red-100 hover:bg-red-200 dark:bg-red-950 text-red-700 dark:text-red-300 rounded-lg font-bold text-xs cursor-pointer transition-colors flex items-center gap-1"
                         >
@@ -1418,6 +1459,99 @@ export const CODOrdersView: React.FC<CODOrdersViewProps> = ({
           </div>
         </div>
       )}
+
+      {/* DISPATCH PARCEL MODAL */}
+      {dispatchTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/75 backdrop-blur-xs p-4">
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              onUpdateOrderStatus(dispatchTarget.id, 'dispatched', {
+                courierPartner: (dispatchCourier || dispatchTarget.courierPartner) as any,
+                trackingNumber: dispatchTracking.trim() || dispatchTarget.trackingNumber,
+              });
+              pushToast(`Order #${dispatchTarget.orderNumber} dispatched via ${dispatchCourier}.`, 'success');
+              setDispatchTarget(null);
+            }}
+            className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl w-full max-w-sm p-5 shadow-2xl space-y-4 text-xs"
+          >
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-slate-800 pb-2.5">
+              <h3 className="text-sm font-black text-slate-900 dark:text-white flex items-center gap-1.5">
+                <Truck className="w-4 h-4 text-blue-600" />
+                Dispatch Parcel #{dispatchTarget.orderNumber}
+              </h3>
+              <button
+                type="button"
+                onClick={() => setDispatchTarget(null)}
+                className="p-1 text-slate-400 hover:text-slate-700 cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div>
+              <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">
+                Courier Partner
+              </label>
+              <select
+                value={dispatchCourier}
+                onChange={(e) => setDispatchCourier(e.target.value)}
+                className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
+              >
+                <option value="WASAL delivery">WASAL delivery</option>
+                <option value="Trax">Trax</option>
+                <option value="TCS">TCS</option>
+                <option value="Leopards">Leopards</option>
+                <option value="PostEx">PostEx</option>
+                <option value="Rider">Rider</option>
+                <option value="Self">Self</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">
+                Tracking Number / Consignment #
+              </label>
+              <input
+                type="text"
+                value={dispatchTracking}
+                onChange={(e) => setDispatchTracking(e.target.value)}
+                placeholder="e.g. WSL-123456"
+                className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-mono"
+              />
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
+              <button
+                type="button"
+                onClick={() => setDispatchTarget(null)}
+                className="px-3.5 py-2 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-black cursor-pointer"
+              >
+                Confirm Dispatch
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {createOrderError && (
+        <div className="sr-only">{createOrderError}</div>
+      )}
+
+      <ToastBanner
+        toasts={toasts}
+        onDismiss={(id) => setToasts((prev) => prev.filter((t) => t.id !== id))}
+      />
+      <ConfirmDialogModal
+        dialog={confirmDialog}
+        onClose={() => setConfirmDialog(null)}
+      />
     </div>
   );
 };

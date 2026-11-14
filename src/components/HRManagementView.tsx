@@ -28,6 +28,12 @@ import {
   EmployeeRole,
 } from '../types';
 import { openWhatsAppDirect } from '../utils/whatsapp';
+import {
+  ToastBanner,
+  ToastMessage,
+  ConfirmDialogModal,
+  ConfirmDialogState,
+} from './AppDialogs';
 
 interface HRManagementViewProps {
   employees: Employee[];
@@ -54,6 +60,16 @@ export const HRManagementView: React.FC<HRManagementViewProps> = ({
   const [editingAttendanceRecord, setEditingAttendanceRecord] = useState<AttendanceRecord | null>(null);
   const [selectedDate, setSelectedDate] = useState<string>(() => new Date().toISOString().split('T')[0]);
   const [selectedPaySlipEmp, setSelectedPaySlipEmp] = useState<Employee | null>(null);
+  const [toasts, setToasts] = useState<ToastMessage[]>([]);
+  const [confirmDialog, setConfirmDialog] = useState<ConfirmDialogState | null>(null);
+
+  const pushToast = (text: string, type: ToastMessage['type'] = 'info') => {
+    const id = `toast_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+    setToasts((prev) => [...prev, { id, text, type }]);
+    setTimeout(() => {
+      setToasts((prev) => prev.filter((t) => t.id !== id));
+    }, 4500);
+  };
 
   // New Employee Form State
   const [name, setName] = useState('');
@@ -121,7 +137,7 @@ export const HRManagementView: React.FC<HRManagementViewProps> = ({
     setUrduName('');
     setPhone('');
     setCnic('');
-    alert(`نیا ملازم ${name} کامیابی سے بھرتی کر لیا گیا!\nEmployee registered with allowances.`);
+    pushToast(`نیا ملازم ${name} کامیابی سے بھرتی کر لیا گیا! Employee registered with allowances.`, 'success');
   };
 
   // Compute Monthly Payroll for Current Month
@@ -573,9 +589,13 @@ export const HRManagementView: React.FC<HRManagementViewProps> = ({
                               {onDeleteAttendance && (
                                 <button
                                   onClick={() => {
-                                    if (confirm('Delete this attendance entry?')) {
-                                      onDeleteAttendance(rec.id);
-                                    }
+                                    setConfirmDialog({
+                                      title: 'Delete Attendance Entry',
+                                      message: 'Are you sure you want to delete this attendance entry?',
+                                      confirmLabel: 'Delete',
+                                      danger: true,
+                                      onConfirm: () => onDeleteAttendance(rec.id),
+                                    });
                                   }}
                                   className="p-1 text-red-600 hover:bg-red-50 dark:hover:bg-red-950 rounded cursor-pointer"
                                   title="Delete Record"
@@ -863,8 +883,9 @@ export const HRManagementView: React.FC<HRManagementViewProps> = ({
               onSubmit={(e) => {
                 e.preventDefault();
                 onSaveEmployee(editingEmployee);
+                const savedName = editingEmployee.name;
                 setEditingEmployee(null);
-                alert(`ملازم ${editingEmployee.name} کی معلومات کامیابی سے تبدیل کر دی گئیں!`);
+                pushToast(`ملازم ${savedName} کی معلومات کامیابی سے تبدیل کر دی گئیں!`, 'success');
               }}
               className="space-y-4"
             >
@@ -1059,10 +1080,18 @@ export const HRManagementView: React.FC<HRManagementViewProps> = ({
                   <button
                     type="button"
                     onClick={() => {
-                      if (confirm(`Delete employee ${editingEmployee.name}?`)) {
-                        onDeleteEmployee(editingEmployee.id);
-                        setEditingEmployee(null);
-                      }
+                      const empId = editingEmployee.id;
+                      const empName = editingEmployee.name;
+                      setConfirmDialog({
+                        title: `Delete Employee ${empName}`,
+                        message: `Are you sure you want to remove employee ${empName}?`,
+                        confirmLabel: 'Delete Staff',
+                        danger: true,
+                        onConfirm: () => {
+                          onDeleteEmployee(empId);
+                          setEditingEmployee(null);
+                        },
+                      });
                     }}
                     className="px-3 py-1.5 text-xs text-red-600 hover:bg-red-50 dark:hover:bg-red-950/60 rounded-lg cursor-pointer flex items-center gap-1"
                   >
@@ -1113,7 +1142,7 @@ export const HRManagementView: React.FC<HRManagementViewProps> = ({
                 e.preventDefault();
                 onSaveAttendance(editingAttendanceRecord);
                 setEditingAttendanceRecord(null);
-                alert('حاضری ریکارڈ کامیابی سے اپ ڈیٹ ہو گیا!');
+                pushToast('حاضری ریکارڈ کامیابی سے اپ ڈیٹ ہو گیا!', 'success');
               }}
               className="space-y-3"
             >
@@ -1186,10 +1215,17 @@ export const HRManagementView: React.FC<HRManagementViewProps> = ({
                   <button
                     type="button"
                     onClick={() => {
-                      if (confirm('Delete this attendance entry?')) {
-                        onDeleteAttendance(editingAttendanceRecord.id);
-                        setEditingAttendanceRecord(null);
-                      }
+                      const recId = editingAttendanceRecord.id;
+                      setConfirmDialog({
+                        title: 'Delete Attendance Entry',
+                        message: 'Are you sure you want to delete this attendance entry?',
+                        confirmLabel: 'Delete Entry',
+                        danger: true,
+                        onConfirm: () => {
+                          onDeleteAttendance(recId);
+                          setEditingAttendanceRecord(null);
+                        },
+                      });
                     }}
                     className="px-3 py-1.5 text-xs text-red-600 hover:bg-red-50 dark:hover:bg-red-950/60 rounded-lg cursor-pointer flex items-center gap-1"
                   >
@@ -1217,6 +1253,15 @@ export const HRManagementView: React.FC<HRManagementViewProps> = ({
           </div>
         </div>
       )}
+
+      <ToastBanner
+        toasts={toasts}
+        onDismiss={(id) => setToasts((prev) => prev.filter((t) => t.id !== id))}
+      />
+      <ConfirmDialogModal
+        dialog={confirmDialog}
+        onClose={() => setConfirmDialog(null)}
+      />
     </div>
   );
 };

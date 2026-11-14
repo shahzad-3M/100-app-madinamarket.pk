@@ -61,6 +61,7 @@ export const ProductBroadcastModal: React.FC<ProductBroadcastModalProps> = ({
   const [includeCustomers, setIncludeCustomers] = useState(true);
   const [includeManualContacts, setIncludeManualContacts] = useState(true);
   const [saveCampaign, setSaveCampaign] = useState(true);
+  const [formError, setFormError] = useState('');
 
   if (!isOpen) return null;
 
@@ -128,12 +129,13 @@ export const ProductBroadcastModal: React.FC<ProductBroadcastModalProps> = ({
   };
 
   const handleSubmit = (sendNow: boolean) => {
+    setFormError('');
     if (!productName.trim()) {
-      alert('Please enter product / item name');
+      setFormError('Please enter product / item name.');
       return;
     }
     if (!productLink.trim()) {
-      alert('Please enter product or catalog link');
+      setFormError('Please enter product or catalog link.');
       return;
     }
 
@@ -185,6 +187,11 @@ export const ProductBroadcastModal: React.FC<ProductBroadcastModalProps> = ({
         <div className="p-6 grid grid-cols-1 lg:grid-cols-12 gap-6 text-xs">
           {/* Left Column: Product Information (5 Cols) */}
           <div className="lg:col-span-5 space-y-3.5">
+            {formError && (
+              <div className="p-2.5 rounded-lg bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800 text-xs font-semibold text-red-700 dark:text-red-300">
+                {formError}
+              </div>
+            )}
             <h3 className="font-extrabold text-slate-900 dark:text-white uppercase tracking-wider text-[11px]">
               1. Product &amp; Offer Details
             </h3>

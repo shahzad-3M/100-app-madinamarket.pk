@@ -32,6 +32,7 @@ export const ScheduleWhatsAppModal: React.FC<ScheduleWhatsAppModalProps> = ({
   const [customDueDate, setCustomDueDate] = useState<string>('');
   const [messageText, setMessageText] = useState<string>('');
   const [copied, setCopied] = useState<boolean>(false);
+  const [formError, setFormError] = useState<string>('');
 
   useEffect(() => {
     if (initialCustomerId) setCustomerId(initialCustomerId);
@@ -74,12 +75,13 @@ export const ScheduleWhatsAppModal: React.FC<ScheduleWhatsAppModalProps> = ({
   };
 
   const handleSave = (sendNow: boolean) => {
+    setFormError('');
     if (!selectedCustomer) {
-      alert('Please select a customer');
+      setFormError('Please select a customer.');
       return;
     }
     if (!scheduledFor) {
-      alert('Please choose a scheduled date');
+      setFormError('Please choose a scheduled date.');
       return;
     }
 
@@ -133,6 +135,11 @@ export const ScheduleWhatsAppModal: React.FC<ScheduleWhatsAppModalProps> = ({
         <div className="p-6 grid grid-cols-1 md:grid-cols-2 gap-6">
           {/* Controls */}
           <div className="space-y-4">
+            {formError && (
+              <div className="p-2.5 rounded-lg bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800 text-xs font-semibold text-red-700 dark:text-red-300">
+                {formError}
+              </div>
+            )}
             <div>
               <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
                 Target Customer / پارٹی منتخب کریں *

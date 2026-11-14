@@ -281,7 +281,7 @@ export const StoreCatalogView: React.FC<StoreCatalogViewProps> = ({
           )}
 
           {/* Customer Type Quick Selector (Admin Only) */}
-          {!isCustomerView && userRole === 'admin' && (
+          {!isCustomerView && (userRole === 'admin' || userRole === 'super_admin') && (
             <div className="pt-3 border-t border-slate-100 dark:border-slate-800">
               <span className="text-[10px] uppercase font-bold tracking-wider text-slate-400 block mb-2">
                 Customer Mode (کسٹمر کی قسم)
@@ -358,7 +358,7 @@ export const StoreCatalogView: React.FC<StoreCatalogViewProps> = ({
               <span className="text-slate-400 text-xs">|</span>
 
               <span className="text-slate-500 text-[11px] font-mono">
-                Page 1 of {Math.max(1, Math.ceil(filteredProducts.length / 15))}
+                All {filteredProducts.length} items loaded
               </span>
             </div>
           </div>
@@ -517,7 +517,7 @@ export const StoreCatalogView: React.FC<StoreCatalogViewProps> = ({
                       </a>
                     )}
 
-                    {/* Action Bar: Add to Cart / WhatsApp Ordering Options */}
+                    {/* Action Bar: Add to Cart / WhatsApp Ordering Options (WhatsApp hidden in Customer View) */}
                     <div className="pt-0.5 space-y-1">
                       {product.isUpcoming ? (
                         <div className="flex items-center gap-1">
@@ -528,17 +528,19 @@ export const StoreCatalogView: React.FC<StoreCatalogViewProps> = ({
                           >
                             Coming Soon
                           </button>
-                          <button
-                            type="button"
-                            onClick={() => {
-                              const text = `السلام علیکم! میں *${product.name}* کے بارے میں معلومات اور لاٹ بکنگ کروانا چاہتا ہوں۔`;
-                              openWhatsAppDirect(product.investorWhatsApp || profile.phone || '03125256266', text);
-                            }}
-                            className="p-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg cursor-pointer transition-colors shadow-2xs"
-                            title="Enquire on WhatsApp"
-                          >
-                            <Phone className="w-3.5 h-3.5" />
-                          </button>
+                          {!isCustomerView && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const text = `السلام علیکم! میں *${product.name}* کے بارے میں معلومات اور لاٹ بکنگ کروانا چاہتا ہوں۔`;
+                                openWhatsAppDirect(product.investorWhatsApp || profile.phone || '03125256266', text);
+                              }}
+                              className="p-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg cursor-pointer transition-colors shadow-2xs"
+                              title="Enquire on WhatsApp"
+                            >
+                              <Phone className="w-3.5 h-3.5" />
+                            </button>
+                          )}
                         </div>
                       ) : (
                         <div className="flex items-center gap-1">
@@ -570,21 +572,23 @@ export const StoreCatalogView: React.FC<StoreCatalogViewProps> = ({
                             </button>
                           )}
 
-                          {/* Direct WhatsApp Ordering Button */}
-                          <button
-                            type="button"
-                            onClick={() => {
-                              const text = `السلام علیکم! میں *${product.name}* کا آرڈر دینا چاہتا ہوں۔\nہول سیل قیمت: ${profile.currencySymbol}${product.ourPrice.toLocaleString('en-PK')}`;
-                              openWhatsAppDirect(profile.phone || '03125256266', text);
-                            }}
-                            className="p-1.5 sm:p-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg cursor-pointer transition-colors shrink-0 shadow-2xs"
-                            title="Order directly on WhatsApp"
-                          >
-                            <Phone className="w-3.5 h-3.5" />
-                          </button>
+                          {/* Direct WhatsApp Ordering Button (Merchant/Admin view only) */}
+                          {!isCustomerView && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const text = `السلام علیکم! میں *${product.name}* کا آرڈر دینا چاہتا ہوں۔\nہول سیل قیمت: ${profile.currencySymbol}${product.ourPrice.toLocaleString('en-PK')}`;
+                                openWhatsAppDirect(profile.phone || '03125256266', text);
+                              }}
+                              className="p-1.5 sm:p-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg cursor-pointer transition-colors shrink-0 shadow-2xs"
+                              title="Order directly on WhatsApp"
+                            >
+                              <Phone className="w-3.5 h-3.5" />
+                            </button>
+                          )}
 
-                          {/* Investor WhatsApp ordering button if assigned */}
-                          {product.investorWhatsApp && (
+                          {/* Investor WhatsApp ordering button (Merchant/Admin view only) */}
+                          {!isCustomerView && product.investorWhatsApp && (
                             <button
                               type="button"
                               onClick={() => {

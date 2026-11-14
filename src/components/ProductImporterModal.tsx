@@ -511,7 +511,7 @@ export const ProductImporterModal: React.FC<ProductImporterModalProps> = ({
         pictures: [dataUrl, ...(extractedProduct.pictures?.filter((p) => p !== extractedProduct.imageUrl) || [])],
       });
     } catch (err) {
-      alert('Failed to load image file. Please try another image.');
+      setImportError('Failed to load image file. Please try another image.');
     }
   };
 
@@ -531,7 +531,7 @@ export const ProductImporterModal: React.FC<ProductImporterModalProps> = ({
         pictures: [...existingPics, ...newUrls],
       });
     } catch (err) {
-      alert('Failed to upload gallery images.');
+      setImportError('Failed to upload gallery images.');
     }
   };
 
@@ -575,7 +575,7 @@ export const ProductImporterModal: React.FC<ProductImporterModalProps> = ({
         });
       }
     } catch {
-      alert('Failed to update variation image.');
+      setImportError('Failed to update variation image.');
     }
   };
 
@@ -702,11 +702,6 @@ export const ProductImporterModal: React.FC<ProductImporterModalProps> = ({
     };
 
     onSaveProduct(productToSave);
-    alert(
-      publishImmediately
-        ? `Product "${productToSave.name}" approved and published to store catalog!`
-        : `Product "${productToSave.name}" saved as draft. You can publish it anytime.`
-    );
     onClose();
   };
 

@@ -52,6 +52,7 @@ import {
   calculateSalespersonCommission,
 } from '../utils/storage';
 import { createPasswordRecord } from '../utils/security';
+import { ToastBanner, ToastMessage } from './AppDialogs';
 
 interface BranchManagementViewProps {
   currentUserRole: UserRole;
@@ -137,6 +138,15 @@ export const BranchManagementView: React.FC<BranchManagementViewProps> = ({
 
   // Search & Filter
   const [searchQuery, setSearchQuery] = useState('');
+  const [toasts, setToasts] = useState<ToastMessage[]>([]);
+
+  const pushToast = (text: string, type: ToastMessage['type'] = 'info') => {
+    const id = `toast_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`;
+    setToasts((prev) => [...prev, { id, text, type }]);
+    setTimeout(() => {
+      setToasts((prev) => prev.filter((t) => t.id !== id));
+    }, 4500);
+  };
 
   // Check role
   const isSuperAdminOrAdmin = currentUserRole === 'super_admin' || currentUserRole === 'admin';
@@ -163,7 +173,7 @@ export const BranchManagementView: React.FC<BranchManagementViewProps> = ({
 
   const handleSaveBranch = () => {
     if (!branchForm.name?.trim() || !branchForm.code?.trim()) {
-      alert('Branch Name and Code are required.');
+      pushToast('Branch Name and Code are required.', 'error');
       return;
     }
 
@@ -258,7 +268,7 @@ export const BranchManagementView: React.FC<BranchManagementViewProps> = ({
     });
     setUsers(getUserAccounts());
     setIsAuthoritiesModalOpen(false);
-    alert(`Updated special authorities for manager ${selectedManager.fullName}.`);
+    pushToast(`Updated special authorities for manager ${selectedManager.fullName}.`, 'success');
   };
 
   const handleAssignManagerBranch = (managerId: string, branchId: string) => {
@@ -291,7 +301,7 @@ export const BranchManagementView: React.FC<BranchManagementViewProps> = ({
 
   const handleCreateManager = async () => {
     if (!newManagerForm.username.trim() || !newManagerForm.fullName.trim() || !newManagerForm.phone.trim()) {
-      alert('Username, Full Name, and Mobile Number are required.');
+      pushToast('Username, Full Name, and Mobile Number are required.', 'error');
       return;
     }
 
@@ -354,16 +364,16 @@ export const BranchManagementView: React.FC<BranchManagementViewProps> = ({
         branchId: '',
         password: '',
       });
-      alert(`Store Manager account created successfully! Temporary PIN: ${plainPin}`);
+      pushToast(`Store Manager account created successfully! Temporary PIN: ${plainPin}`, 'success');
     } else {
-      alert('Username or phone already taken.');
+      pushToast('Username or phone already taken.', 'error');
     }
   };
 
   // SALESPERSON REFERRAL ACTIONS
   const handleCreateReferralCode = () => {
     if (!newReferralForm.code.trim() || !newReferralForm.salespersonName.trim()) {
-      alert('Referral Code and Salesperson Name are required.');
+      pushToast('Referral Code and Salesperson Name are required.', 'error');
       return;
     }
 
@@ -406,7 +416,7 @@ export const BranchManagementView: React.FC<BranchManagementViewProps> = ({
   // SETTLE COMMISSION
   const handleSettleCommission = () => {
     if (!payoutTarget || !payoutRef.trim()) {
-      alert('Please provide a settlement reference or bank voucher ID.');
+      pushToast('Please provide a settlement reference or bank voucher ID.', 'error');
       return;
     }
 
@@ -433,9 +443,10 @@ export const BranchManagementView: React.FC<BranchManagementViewProps> = ({
       saveSalespersonReferrals(updatedRefs);
     }
 
+    const settledAmt = payoutTarget.calculatedCommission;
     setPayoutTarget(null);
     setPayoutRef('');
-    alert(`Commission of Rs. ${payoutTarget.calculatedCommission.toLocaleString('en-PK')} settled successfully!`);
+    pushToast(`Commission of Rs. ${settledAmt.toLocaleString('en-PK')} settled successfully!`, 'success');
   };
 
   // FILTERED DATA BY BRANCH
@@ -847,7 +858,10 @@ export const BranchManagementView: React.FC<BranchManagementViewProps> = ({
                               onClick={() => {
                                 const res = resetUserPasswordToDefault(manager.id);
                                 setUsers(getUserAccounts());
-                                alert(`Temporary default PIN reset for ${manager.fullName} to: ${res.tempPin} (user must change upon next login)`);
+                                pushToast(
+                                  `Temporary default PIN reset for ${manager.fullName} to: ${res.tempPin} (user must change upon next login).`,
+                                  'info'
+                                );
                               }}
                               className="p-1 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 cursor-pointer"
                               title="Reset Password"
@@ -1714,6 +1728,11 @@ export const BranchManagementView: React.FC<BranchManagementViewProps> = ({
           </div>
         </div>
       )}
+
+      <ToastBanner
+        toasts={toasts}
+        onDismiss={(id) => setToasts((prev) => prev.filter((t) => t.id !== id))}
+      />
     </div>
   );
 };

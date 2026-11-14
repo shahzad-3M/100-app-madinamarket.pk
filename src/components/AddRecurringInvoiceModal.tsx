@@ -26,6 +26,7 @@ export const AddRecurringInvoiceModal: React.FC<AddRecurringInvoiceModalProps> =
   const [nextBillingDate, setNextBillingDate] = useState<string>(new Date().toISOString().split('T')[0]);
   const [autoSendWhatsApp, setAutoSendWhatsApp] = useState<boolean>(true);
   const [notes, setNotes] = useState<string>('');
+  const [formError, setFormError] = useState<string>('');
 
   const [items, setItems] = useState<Array<{ description: string; quantity: number; unitPrice: number; amount: number }>>([
     { description: 'Monthly Retainer Supply / Service', quantity: 1, unitPrice: 25000, amount: 25000 },
@@ -58,16 +59,17 @@ export const AddRecurringInvoiceModal: React.FC<AddRecurringInvoiceModalProps> =
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    setFormError('');
     if (!title.trim()) {
-      alert('Please enter contract or invoice title');
+      setFormError('Please enter contract or invoice title.');
       return;
     }
     if (!customerId) {
-      alert('Please select customer');
+      setFormError('Please select a customer.');
       return;
     }
     if (totalAmount <= 0) {
-      alert('Total amount must be greater than 0');
+      setFormError('Total amount must be greater than 0.');
       return;
     }
 
@@ -113,6 +115,11 @@ export const AddRecurringInvoiceModal: React.FC<AddRecurringInvoiceModalProps> =
         </div>
 
         <form onSubmit={handleSubmit} className="p-6 space-y-4">
+          {formError && (
+            <div className="p-2.5 rounded-lg bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800 text-xs font-semibold text-red-700 dark:text-red-300">
+              {formError}
+            </div>
+          )}
           <div>
             <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
               Contract / Recurring Profile Title *

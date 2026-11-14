@@ -54,7 +54,10 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
   const [selectedDailyDate, setSelectedDailyDate] = useState<string>(() => new Date().toISOString().split('T')[0]);
   const [wasalReportDate, setWasalReportDate] = useState<string>('');
 
-  const wasalSettlements = useMemo(() => getWasalSettlements(), []);
+  const wasalSettlements = useMemo(
+    () => getWasalSettlements(),
+    [codOrders, reportType, wasalReportDate]
+  );
   const allWasalOrders = useMemo(
     () => codOrders.filter((o) => o.courierPartner === 'WASAL delivery'),
     [codOrders]
@@ -279,14 +282,13 @@ export const ReportsView: React.FC<ReportsViewProps> = ({
 
   // DEDICATED CUSTOMER REPORTS & SAVINGS PORTAL (USER DIRECTIVE: customer-scoped reports visibility)
   if (userRole === 'customer') {
-    let matchedCustomer = customers[0];
+    let matchedCustomer: Customer | undefined = undefined;
     if (currentUser?.customerId) {
-      const found = customers.find((c) => c.id === currentUser.customerId);
-      if (found) matchedCustomer = found;
-    } else if (currentUser?.phone) {
+      matchedCustomer = customers.find((c) => c.id === currentUser.customerId);
+    }
+    if (!matchedCustomer && currentUser?.phone) {
       const clean = currentUser.phone.replace(/\D/g, '');
-      const found = customers.find((c) => c.phone.replace(/\D/g, '') === clean);
-      if (found) matchedCustomer = found;
+      matchedCustomer = customers.find((c) => c.phone.replace(/\D/g, '') === clean);
     }
 
     const custTxs = transactions.filter((t) => t.customerId === matchedCustomer?.id);

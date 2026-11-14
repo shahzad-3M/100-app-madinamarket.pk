@@ -114,22 +114,26 @@ export const MonthlyStatementView: React.FC<MonthlyStatementViewProps> = ({
     openWhatsAppDirect(statement.customer.phone, msg);
   };
 
+  const [batchNotice, setBatchNotice] = useState<string | null>(null);
+  const [confirmBatchSend, setConfirmBatchSend] = useState(false);
+
   const handleBatchSendAll = () => {
     if (monthlyStatements.length === 0) {
-      alert('No monthly statements found for this period.');
+      setBatchNotice('No monthly statements found for this period.');
       return;
     }
-    const confirmSend = confirm(
-      `Send WhatsApp monthly statement to ${monthlyStatements.length} customer(s) for ${monthlyStatements[0]?.monthName}?`
-    );
-    if (!confirmSend) return;
+    setConfirmBatchSend(true);
+  };
 
+  const executeBatchSendAll = () => {
+    setConfirmBatchSend(false);
     monthlyStatements.forEach((st, idx) => {
       setTimeout(() => {
         const msg = buildMonthlyStatementWhatsAppMessage(st, profile);
         openWhatsAppDirect(st.customer.phone, msg);
       }, idx * 600);
     });
+    setBatchNotice(`Queued WhatsApp dispatch for ${monthlyStatements.length} statement(s).`);
   };
 
   const monthOptions = [
@@ -206,6 +210,43 @@ export const MonthlyStatementView: React.FC<MonthlyStatementViewProps> = ({
           )}
         </div>
       </div>
+
+      {confirmBatchSend && (
+        <div className="p-3.5 rounded-xl bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700 flex flex-wrap items-center justify-between gap-3 text-xs">
+          <span className="font-bold text-amber-950 dark:text-amber-200">
+            Send WhatsApp monthly statement to {monthlyStatements.length} customer(s) for {monthlyStatements[0]?.monthName}?
+          </span>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setConfirmBatchSend(false)}
+              className="px-3 py-1.5 rounded-lg bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 font-bold text-slate-700 dark:text-slate-200 cursor-pointer"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={executeBatchSendAll}
+              className="px-3.5 py-1.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold cursor-pointer"
+            >
+              Confirm &amp; Send All
+            </button>
+          </div>
+        </div>
+      )}
+
+      {batchNotice && (
+        <div className="p-3 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-xs font-semibold text-emerald-800 dark:text-emerald-200 flex items-center justify-between">
+          <span>{batchNotice}</span>
+          <button
+            type="button"
+            onClick={() => setBatchNotice(null)}
+            className="text-emerald-700 dark:text-emerald-300 hover:underline font-bold cursor-pointer"
+          >
+            Dismiss
+          </button>
+        </div>
+      )}
 
       {/* 2. STATS CARDS */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -675,10 +716,23 @@ export const MonthlyStatementView: React.FC<MonthlyStatementViewProps> = ({
                 </table>
               </div>
 
-              {/* Payment Accounts */}
+              {/* Payment Accounts (Raw wallet numbers hidden in customer view) */}
               <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl text-[11px]">
-                <h5 className="font-bold text-slate-900 mb-1">Official Payment Channels (EasyPaisa / JazzCash / SadaPay: 03125256266):</h5>
-                <p className="text-slate-600">EasyPaisa / JazzCash: 03125256266 · SadaPay: 03125256266 (@100dagar) · Meezan Bank A/C: 01020304050607 (100DAGAR Enterprises)</p>
+                {isCustomer ? (
+                  <>
+                    <h5 className="font-bold text-slate-900 mb-1">Payment Instructions:</h5>
+                    <p className="text-slate-600">
+                      EasyPaisa · JazzCash · SadaPay · Cash on Delivery (COD) accepted. Unified payment wallet details are displayed at Checkout when placing an order.
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <h5 className="font-bold text-slate-900 mb-1">Official Payment Channels (EasyPaisa / JazzCash / SadaPay: {profile.paymentChannels.easyPaisa.accountNumber}):</h5>
+                    <p className="text-slate-600">
+                      EasyPaisa / JazzCash / SadaPay: {profile.paymentChannels.easyPaisa.accountNumber} · Bank A/C: {profile.paymentChannels.bankDetails.accountNumber} ({profile.paymentChannels.bankDetails.bankName})
+                    </p>
+                  </>
+                )}
               </div>
             </div>
           </div>

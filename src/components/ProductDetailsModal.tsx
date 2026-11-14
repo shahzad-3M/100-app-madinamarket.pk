@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   X,
   ExternalLink,
@@ -24,6 +24,11 @@ interface ProductDetailsModalProps {
   isCustomerView?: boolean;
 }
 
+const getVariationLabel = (v: NonNullable<ProductItem['variations']>[number]) =>
+  [v.size, v.color, ...Object.values(v.attributes || {})].filter(Boolean).join(' · ') ||
+  v.sku ||
+  'Variant';
+
 export const ProductDetailsModal: React.FC<ProductDetailsModalProps> = ({
   product,
   isOpen,
@@ -32,6 +37,28 @@ export const ProductDetailsModal: React.FC<ProductDetailsModalProps> = ({
   profile,
   isCustomerView = false,
 }) => {
+  const [activeImageIndex, setActiveImageIndex] = useState(0);
+  const [selectedVariationIndex, setSelectedVariationIndex] = useState<number | null>(null);
+  const [selectedSize, setSelectedSize] = useState<string>('Standard');
+  const [quantity, setQuantity] = useState(1);
+  const [addedAnimation, setAddedAnimation] = useState(false);
+
+  useEffect(() => {
+    if (!isOpen || !product) return;
+    setActiveImageIndex(0);
+    setQuantity(1);
+    setAddedAnimation(false);
+    if (product.variations && product.variations.length > 0) {
+      setSelectedVariationIndex(0);
+      setSelectedSize(getVariationLabel(product.variations[0]));
+    } else {
+      setSelectedVariationIndex(null);
+      setSelectedSize(
+        product.selectedSize || (product.sizes && product.sizes.length > 0 ? product.sizes[0] : 'Standard')
+      );
+    }
+  }, [isOpen, product?.id]);
+
   if (!isOpen || !product) return null;
 
   const pictures = product.pictures && product.pictures.length > 0
@@ -39,23 +66,6 @@ export const ProductDetailsModal: React.FC<ProductDetailsModalProps> = ({
     : product.imageUrl
     ? [product.imageUrl]
     : [];
-
-  const getVariationLabel = (v: NonNullable<ProductItem['variations']>[number]) =>
-    [v.size, v.color, ...Object.values(v.attributes || {})].filter(Boolean).join(' · ') ||
-    v.sku ||
-    'Variant';
-
-  const [activeImageIndex, setActiveImageIndex] = useState(0);
-  const [selectedVariationIndex, setSelectedVariationIndex] = useState<number | null>(
-    product.variations && product.variations.length > 0 ? 0 : null
-  );
-  const [selectedSize, setSelectedSize] = useState<string>(
-    product.variations && product.variations.length > 0
-      ? getVariationLabel(product.variations[0])
-      : product.selectedSize || (product.sizes && product.sizes.length > 0 ? product.sizes[0] : 'Standard')
-  );
-  const [quantity, setQuantity] = useState(1);
-  const [addedAnimation, setAddedAnimation] = useState(false);
 
   const activeVariation =
     selectedVariationIndex !== null && product.variations && product.variations[selectedVariationIndex]
@@ -314,21 +324,23 @@ export const ProductDetailsModal: React.FC<ProductDetailsModalProps> = ({
                         ✨ Coming Soon / وائرل - جلد دستیاب
                       </span>
                       <p className="text-[11px] text-purple-700 dark:text-purple-300 mt-0.5">
-                        This item is currently under transit. Pre-booking enquiries open directly via WhatsApp.
+                        This item is currently under transit and will be available for checkout soon.
                       </p>
                     </div>
 
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const text = `السلام علیکم! میں 100DAGAR پر جلد آنے والی پراڈکٹ *${product.name}* کے بارے میں معلومات اور لاٹ بکنگ کروانا چاہتا ہوں۔ براہ کرم تفصیلات رہنمائی فرمائیں۔`;
-                        openWhatsAppDirect(product.investorWhatsApp || profile.phone || '03125256266', text);
-                      }}
-                      className="w-full py-2.5 px-4 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-xs transition-colors flex items-center justify-center gap-2 cursor-pointer"
-                    >
-                      <Phone className="w-4 h-4" />
-                      <span>Enquire on WhatsApp (واٹس ایپ معلومات و بکنگ)</span>
-                    </button>
+                    {!isCustomerView && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const text = `السلام علیکم! میں 100DAGAR پر جلد آنے والی پراڈکٹ *${product.name}* کے بارے میں معلومات اور لاٹ بکنگ کروانا چاہتا ہوں۔ براہ کرم تفصیلات رہنمائی فرمائیں۔`;
+                          openWhatsAppDirect(product.investorWhatsApp || profile.phone || '03125256266', text);
+                        }}
+                        className="w-full py-2.5 px-4 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-xs transition-colors flex items-center justify-center gap-2 cursor-pointer"
+                      >
+                        <Phone className="w-4 h-4" />
+                        <span>Enquire on WhatsApp (واٹس ایپ معلومات و بکنگ)</span>
+                      </button>
+                    )}
                   </div>
                 ) : (
                   <>
@@ -373,22 +385,24 @@ export const ProductDetailsModal: React.FC<ProductDetailsModalProps> = ({
                       </button>
                     </div>
 
-                    {/* Option 2: Direct Business WhatsApp Order */}
-                    <button
-                      type="button"
-                      onClick={handleDirectWhatsAppOrder}
-                      className="w-full py-2 px-4 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-xs transition-colors flex items-center justify-center gap-2 cursor-pointer"
-                    >
-                      <Phone className="w-3.5 h-3.5" />
-                      <span>Order on WhatsApp (واٹس ایپ فوری آرڈر)</span>
-                    </button>
+                    {/* Option 2: Direct Business WhatsApp Order (Hidden in Customer View) */}
+                    {!isCustomerView && (
+                      <button
+                        type="button"
+                        onClick={handleDirectWhatsAppOrder}
+                        className="w-full py-2 px-4 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-xs transition-colors flex items-center justify-center gap-2 cursor-pointer"
+                      >
+                        <Phone className="w-3.5 h-3.5" />
+                        <span>Order on WhatsApp (واٹس ایپ فوری آرڈر)</span>
+                      </button>
+                    )}
 
-                    {/* Option 3: Investor WhatsApp Order (If assigned to this product) */}
-                    {product.investorWhatsApp && (
+                    {/* Option 3: Investor WhatsApp Order (Hidden in Customer View) */}
+                    {!isCustomerView && product.investorWhatsApp && (
                       <button
                         type="button"
                         onClick={() => {
-                          const text = `السلام علیکم! میں *${product.name}* کا آرڈر انویسٹر پارٹنر سے کنفرم کرنا چاہتا ہوں۔\nتعداد: ${quantity}\nقیمت: ${profile.currencySymbol}${(product.ourPrice * quantity).toLocaleString('en-PK')}`;
+                          const text = `السلام علیکم! میں *${product.name}* کا آرڈر انویسٹر پارٹنر سے کنفرم کرنا چاہتا ہوں۔\nتعداد: ${quantity}\nقیمت: ${profile.currencySymbol}${(activePrice * quantity).toLocaleString('en-PK')}`;
                           openWhatsAppDirect(product.investorWhatsApp!, text);
                         }}
                         className="w-full py-2 px-4 bg-teal-600 hover:bg-teal-700 text-white font-bold text-xs rounded-xl shadow-xs transition-colors flex items-center justify-center gap-2 cursor-pointer"
