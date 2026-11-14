@@ -20,8 +20,12 @@ import {
   EyeOff,
   Sparkles,
   ExternalLink,
+  MapPin,
+  Edit2,
 } from 'lucide-react';
 import { AppUser, BusinessProfile, Customer, Transaction } from '../types';
+import { defaultDeliveryCities } from '../utils/defaultData';
+import { AddressFieldsGroup } from './AddressFieldsGroup';
 import {
   createUserAccount,
   getDefaultPinForPhone,
@@ -41,6 +45,7 @@ interface CustomerPortalViewProps {
   onOpenCart?: () => void;
   onNavigateTab: (tab: string) => void;
   onPasswordChanged?: () => void;
+  onUpdateCustomer?: (updated: Customer) => void;
 }
 
 export const CustomerPortalView: React.FC<CustomerPortalViewProps> = ({
@@ -52,10 +57,20 @@ export const CustomerPortalView: React.FC<CustomerPortalViewProps> = ({
   onOpenCart,
   onNavigateTab,
   onPasswordChanged,
+  onUpdateCustomer,
 }) => {
   const [activeTab, setActiveTab] = useState<
     'dashboard' | 'orders' | 'reports' | 'payments' | 'security'
   >('dashboard');
+
+  // Delivery Address Edit State
+  const [isEditingAddress, setIsEditingAddress] = useState(false);
+  const [addrCity, setAddrCity] = useState(customer?.city || 'Muzaffarabad');
+  const [addrArea, setAddrArea] = useState(customer?.area || '');
+  const [addrMohalla, setAddrMohalla] = useState(customer?.mohalla || '');
+  const [addrLandmark, setAddrLandmark] = useState(customer?.landmark || '');
+  const [addrLine, setAddrLine] = useState(customer?.address || '');
+  const [addrSavedMsg, setAddrSavedMsg] = useState('');
 
   // Change Password State
   const [currentPasswordInput, setCurrentPasswordInput] = useState('');
@@ -358,6 +373,122 @@ export const CustomerPortalView: React.FC<CustomerPortalViewProps> = ({
               </span>
             </div>
           </div>
+
+          {/* Customer Delivery Address Profile Card */}
+          {customer && (
+            <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-4 shadow-2xs space-y-3">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <MapPin className="w-4 h-4 text-amber-500" />
+                  <h3 className="text-xs font-black text-slate-900 dark:text-white uppercase tracking-wider">
+                    Saved Delivery Address (پتہ برائے ڈلیوری)
+                  </h3>
+                </div>
+                {onUpdateCustomer && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setAddrSavedMsg('');
+                      if (!isEditingAddress) {
+                        setAddrCity(customer.city || 'Muzaffarabad');
+                        setAddrArea(customer.area || '');
+                        setAddrMohalla(customer.mohalla || '');
+                        setAddrLandmark(customer.landmark || '');
+                        setAddrLine(customer.address || '');
+                      }
+                      setIsEditingAddress(!isEditingAddress);
+                    }}
+                    className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-slate-800 text-xs font-bold text-slate-700 dark:text-slate-200 hover:bg-slate-200 dark:hover:bg-slate-700 cursor-pointer"
+                  >
+                    <Edit2 className="w-3 h-3" />
+                    <span>{isEditingAddress ? 'Cancel' : 'Update Address'}</span>
+                  </button>
+                )}
+              </div>
+
+              {addrSavedMsg && (
+                <div className="p-2.5 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-200 dark:border-emerald-800 text-xs text-emerald-700 dark:text-emerald-300 font-semibold flex items-center gap-1.5">
+                  <CheckCircle2 className="w-4 h-4 shrink-0" />
+                  <span>{addrSavedMsg}</span>
+                </div>
+              )}
+
+              {!isEditingAddress ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 text-xs">
+                  <div className="p-2.5 rounded-lg bg-slate-50 dark:bg-slate-800/50">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase block">City</span>
+                    <span className="font-bold text-slate-800 dark:text-slate-100">{customer.city || 'Not set'}</span>
+                  </div>
+                  <div className="p-2.5 rounded-lg bg-slate-50 dark:bg-slate-800/50">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase block">Area</span>
+                    <span className="font-bold text-slate-800 dark:text-slate-100">{customer.area || 'Not set'}</span>
+                  </div>
+                  <div className="p-2.5 rounded-lg bg-slate-50 dark:bg-slate-800/50">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase block">Mohalla / Neighborhood</span>
+                    <span className="font-bold text-slate-800 dark:text-slate-100">{customer.mohalla || 'Not set'}</span>
+                  </div>
+                  <div className="p-2.5 rounded-lg bg-slate-50 dark:bg-slate-800/50">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase block">Nearby Landmark</span>
+                    <span className="font-bold text-slate-800 dark:text-slate-100">{customer.landmark || 'Not set'}</span>
+                  </div>
+                  {customer.address && (
+                    <div className="sm:col-span-2 lg:col-span-4 p-2.5 rounded-lg bg-slate-50 dark:bg-slate-800/50">
+                      <span className="text-[10px] font-bold text-slate-400 uppercase block">Complete Address</span>
+                      <span className="font-semibold text-slate-800 dark:text-slate-100">{customer.address}</span>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <form
+                  onSubmit={(e) => {
+                    e.preventDefault();
+                    if (!onUpdateCustomer) return;
+                    onUpdateCustomer({
+                      ...customer,
+                      city: addrCity.trim() || undefined,
+                      area: addrArea.trim() || undefined,
+                      mohalla: addrMohalla.trim() || undefined,
+                      landmark: addrLandmark.trim() || undefined,
+                      address: addrLine.trim() || undefined,
+                    });
+                    setIsEditingAddress(false);
+                    setAddrSavedMsg('Delivery address saved and synced.');
+                  }}
+                  className="space-y-3 pt-1"
+                >
+                  <AddressFieldsGroup
+                    cities={
+                      profile.deliveryCities && profile.deliveryCities.length > 0
+                        ? profile.deliveryCities
+                        : defaultDeliveryCities
+                    }
+                    city={addrCity}
+                    area={addrArea}
+                    mohalla={addrMohalla}
+                    landmark={addrLandmark}
+                    address={addrLine}
+                    filterActiveCitiesOnly={true}
+                    showCompleteAddress={true}
+                    onChange={(patch) => {
+                      if (patch.city !== undefined) setAddrCity(patch.city);
+                      if (patch.area !== undefined) setAddrArea(patch.area);
+                      if (patch.mohalla !== undefined) setAddrMohalla(patch.mohalla);
+                      if (patch.landmark !== undefined) setAddrLandmark(patch.landmark);
+                      if (patch.address !== undefined) setAddrLine(patch.address);
+                    }}
+                  />
+                  <div className="flex justify-end">
+                    <button
+                      type="submit"
+                      className="px-4 py-2 bg-slate-900 dark:bg-amber-500 text-white dark:text-slate-950 font-bold text-xs rounded-lg cursor-pointer"
+                    >
+                      Save Delivery Address
+                    </button>
+                  </div>
+                </form>
+              )}
+            </div>
+          )}
 
           {/* Quick Action: "Add My Product" Link direct to WhatsApp */}
           <div className="p-4 bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3">

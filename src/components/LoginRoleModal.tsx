@@ -30,6 +30,7 @@ import {
   updateOwnerPin,
   updateResellerPin,
   updateUserAccount,
+  apiAuthenticateLogin,
 } from '../utils/storage';
 import { createPasswordRecord, generateResetToken, verifyPassword } from '../utils/security';
 import { openWhatsAppDirect } from '../utils/whatsapp';
@@ -167,6 +168,7 @@ export const LoginRoleModal: React.FC<LoginRoleModalProps> = ({
           : false));
 
     if (isSuperAdminPassMatch) {
+      await apiAuthenticateLogin(cleanId, cleanPin);
       logUserLogin({
         userId: superAdminAcc?.id || 'usr_superadmin',
         userName: superAdminAcc?.fullName || 'Shahzad Malik',
@@ -227,6 +229,7 @@ export const LoginRoleModal: React.FC<LoginRoleModalProps> = ({
       }
 
       if (authenticatedAcc) {
+        await apiAuthenticateLogin(authenticatedAcc.username || cleanId, cleanPin);
         logUserLogin({
           userId: authenticatedAcc.id,
           userName: authenticatedAcc.fullName,
@@ -474,6 +477,7 @@ export const LoginRoleModal: React.FC<LoginRoleModalProps> = ({
         updateCustomerPin(savedAccount.linkedCustomerId, forcedNewPass.trim());
       }
 
+      await apiAuthenticateLogin(savedAccount.username || savedAccount.phone, forcedNewPass.trim());
       onSelectRole(savedAccount.role, {
         id: savedAccount.id,
         name: savedAccount.fullName,

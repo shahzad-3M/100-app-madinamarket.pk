@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
 import { X, UserPlus, Phone } from 'lucide-react';
 import { BusinessProfile, Customer, CustomerType } from '../types';
+import { defaultDeliveryCities } from '../utils/defaultData';
+import { AddressFieldsGroup } from './AddressFieldsGroup';
 
 interface AddCustomerModalProps {
   isOpen: boolean;
@@ -20,6 +22,10 @@ export const AddCustomerModal: React.FC<AddCustomerModalProps> = ({
   const [customerType, setCustomerType] = useState<CustomerType>('retail');
   const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
+  const [city, setCity] = useState('Muzaffarabad');
+  const [area, setArea] = useState('');
+  const [mohalla, setMohalla] = useState('');
+  const [landmark, setLandmark] = useState('');
   const [address, setAddress] = useState('');
   const [ntnNumber, setNtnNumber] = useState('');
   const [creditLimit, setCreditLimit] = useState('5000'); // USER DIRECTIVE: default 5000 credit limit
@@ -49,6 +55,10 @@ export const AddCustomerModal: React.FC<AddCustomerModalProps> = ({
         customerType,
         phone: phone.trim(),
         email: email.trim() || undefined,
+        city: city.trim() || undefined,
+        area: area.trim() || undefined,
+        mohalla: mohalla.trim() || undefined,
+        landmark: landmark.trim() || undefined,
         address: address.trim() || undefined,
         ntnNumber: ntnNumber.trim() || undefined,
         creditLimit: parseFloat(creditLimit) || 0,
@@ -62,6 +72,10 @@ export const AddCustomerModal: React.FC<AddCustomerModalProps> = ({
     setUrduName('');
     setPhone('');
     setEmail('');
+    setCity('Muzaffarabad');
+    setArea('');
+    setMohalla('');
+    setLandmark('');
     setAddress('');
     setNtnNumber('');
     setOpeningBalance('0');
@@ -71,7 +85,7 @@ export const AddCustomerModal: React.FC<AddCustomerModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs overflow-y-auto">
-      <div className="relative w-full max-w-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-2xl overflow-hidden my-8">
+      <div className="relative w-full max-w-lg bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl shadow-2xl overflow-hidden my-6 max-h-[92vh] flex flex-col">
         <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-850">
           <div className="flex items-center gap-2">
             <div className="p-1.5 rounded-lg bg-slate-200 dark:bg-slate-800 text-slate-800 dark:text-slate-200">
@@ -94,7 +108,7 @@ export const AddCustomerModal: React.FC<AddCustomerModalProps> = ({
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+        <form onSubmit={handleSubmit} className="p-6 space-y-4 overflow-y-auto">
           {formError && (
             <div className="p-2.5 rounded-lg bg-red-50 dark:bg-red-950/40 border border-red-200 dark:border-red-800 text-xs font-semibold text-red-700 dark:text-red-300">
               {formError}
@@ -249,16 +263,28 @@ export const AddCustomerModal: React.FC<AddCustomerModalProps> = ({
             </div>
           </div>
 
-          <div>
-            <label className="block text-xs font-semibold text-slate-700 dark:text-slate-300 mb-1">
-              Shop / City / Market Address (پتہ)
-            </label>
-            <input
-              type="text"
-              placeholder="e.g. Shop # 12, Circular Road, Urdu Bazaar, Lahore"
-              value={address}
-              onChange={(e) => setAddress(e.target.value)}
-              className="w-full px-3 py-2 text-sm bg-white dark:bg-slate-800 border border-slate-300 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
+          <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-800">
+            <AddressFieldsGroup
+              cities={
+                profile.deliveryCities && profile.deliveryCities.length > 0
+                  ? profile.deliveryCities
+                  : defaultDeliveryCities
+              }
+              city={city}
+              area={area}
+              mohalla={mohalla}
+              landmark={landmark}
+              address={address}
+              filterActiveCitiesOnly={false}
+              showCompleteAddress={true}
+              compact={true}
+              onChange={(patch) => {
+                if (patch.city !== undefined) setCity(patch.city);
+                if (patch.area !== undefined) setArea(patch.area);
+                if (patch.mohalla !== undefined) setMohalla(patch.mohalla);
+                if (patch.landmark !== undefined) setLandmark(patch.landmark);
+                if (patch.address !== undefined) setAddress(patch.address);
+              }}
             />
           </div>
 

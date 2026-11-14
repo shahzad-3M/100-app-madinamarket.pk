@@ -49,6 +49,7 @@ import {
   calculateSalespersonCommission,
 } from '../utils/storage';
 import { openWhatsAppDirect } from '../utils/whatsapp';
+import { isProductPurchaseBlocked } from '../utils/locationCategoryHelpers';
 import { ToastBanner, ToastMessage } from './AppDialogs';
 
 interface WalkInSalesViewProps {
@@ -157,6 +158,13 @@ export const WalkInSalesView: React.FC<WalkInSalesViewProps> = ({
   // Add Item to Cart
   const handleAddItemToCart = () => {
     if (!selectedProduct) return;
+    if (isProductPurchaseBlocked(selectedProduct)) {
+      pushToast(
+        `"${selectedProduct.name}" is in Upcoming Viral Products | Coming Soon and cannot be added to walk-in sales until physical arrival is confirmed.`,
+        'error'
+      );
+      return;
+    }
 
     const unitPrice = selectedVariation?.salePrice || selectedProduct.ourPrice;
     const marketPrice = selectedVariation?.originalPrice || selectedProduct.marketPrice;
@@ -433,10 +441,10 @@ export const WalkInSalesView: React.FC<WalkInSalesViewProps> = ({
     setNewCustReferral('');
   };
 
-  // Filter products for POS quick search
+  // Filter products for POS quick search (exclude Upcoming / Coming Soon items)
   const filteredProducts = products.filter(
     (p) =>
-      !p.isUpcoming &&
+      !isProductPurchaseBlocked(p) &&
       (p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
         p.category.toLowerCase().includes(searchQuery.toLowerCase()) ||
         (p.sku && p.sku.toLowerCase().includes(searchQuery.toLowerCase())))

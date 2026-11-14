@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { BusinessProfile, ProductItem } from '../types';
 import { openWhatsAppDirect } from '../utils/whatsapp';
+import { isProductPurchaseBlocked } from '../utils/locationCategoryHelpers';
 
 interface ProductDetailsModalProps {
   product: ProductItem | null;
@@ -317,30 +318,33 @@ export const ProductDetailsModal: React.FC<ProductDetailsModalProps> = ({
 
               {/* QUANTITY & ACTIONS */}
               <div className="space-y-2 pt-1">
-                {product.isUpcoming ? (
+                {isProductPurchaseBlocked(product) ? (
                   <div className="space-y-2">
                     <div className="p-3 bg-purple-50 dark:bg-purple-950/40 border border-purple-200 dark:border-purple-800 rounded-xl text-center">
                       <span className="text-xs font-black text-purple-900 dark:text-purple-200 uppercase tracking-wider block">
-                        ✨ Coming Soon / وائرل - جلد دستیاب
+                        ✨ Coming Soon / Expected Soon (جلد دستیاب)
                       </span>
-                      <p className="text-[11px] text-purple-700 dark:text-purple-300 mt-0.5">
-                        This item is currently under transit and will be available for checkout soon.
+                      {product.expectedArrivalDate && (
+                        <span className="inline-block mt-1 px-2 py-0.5 rounded bg-purple-200/70 dark:bg-purple-900/60 text-purple-900 dark:text-purple-100 text-[11px] font-bold font-mono">
+                          Expected Arrival Date: {product.expectedArrivalDate}
+                        </span>
+                      )}
+                      <p className="text-[11px] text-purple-700 dark:text-purple-300 mt-1">
+                        This product is informational only until an authorized Admin or Stock Manager confirms physical arrival. Add to Cart &amp; Checkout are disabled.
                       </p>
                     </div>
 
-                    {!isCustomerView && (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const text = `السلام علیکم! میں 100DAGAR پر جلد آنے والی پراڈکٹ *${product.name}* کے بارے میں معلومات اور لاٹ بکنگ کروانا چاہتا ہوں۔ براہ کرم تفصیلات رہنمائی فرمائیں۔`;
-                          openWhatsAppDirect(product.investorWhatsApp || profile.phone || '03125256266', text);
-                        }}
-                        className="w-full py-2.5 px-4 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-xs transition-colors flex items-center justify-center gap-2 cursor-pointer"
-                      >
-                        <Phone className="w-4 h-4" />
-                        <span>Enquire on WhatsApp (واٹس ایپ معلومات و بکنگ)</span>
-                      </button>
-                    )}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const text = `السلام علیکم! میں 100DAGAR پر جلد آنے والی پراڈکٹ *${product.name}* کے بارے میں معلومات اور آمد کی تفصیل معلوم کرنا چاہتا ہوں۔`;
+                        openWhatsAppDirect(product.investorWhatsApp || profile.phone || '03125256266', text);
+                      }}
+                      className="w-full py-2.5 px-4 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-xs transition-colors flex items-center justify-center gap-2 cursor-pointer"
+                    >
+                      <Phone className="w-4 h-4" />
+                      <span>WhatsApp Inquiry (واٹس ایپ معلومات)</span>
+                    </button>
                   </div>
                 ) : (
                   <>

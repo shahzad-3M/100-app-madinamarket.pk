@@ -16,14 +16,37 @@ import {
   ShoppingBag,
   Globe,
   ExternalLink,
+  CalendarClock,
+  CheckCircle2,
+  ShieldAlert,
+  Layers,
 } from 'lucide-react';
-import { BusinessProfile, ProductItem } from '../types';
-import { getCategories, addCategory } from '../utils/storage';
+import { AppUser, BusinessProfile, CategoryRecord, ProductItem, ProductVariation } from '../types';
+import {
+  getCategories,
+  addCategory,
+  getCategoryRecords,
+  apiSaveCategoryRecord,
+  apiActivateProductArrival,
+} from '../utils/storage';
+import {
+  UPCOMING_CATEGORY_ID,
+  UPCOMING_CATEGORY_NAME,
+  isProductPurchaseBlocked,
+  isUserAuthorizedForStockTransfer,
+  doesProductMatchCategoryFilter,
+  resolveCategoryIdsFromProduct,
+  getCategoryBreadcrumb,
+} from '../utils/locationCategoryHelpers';
 import { ProductImporterModal } from './ProductImporterModal';
+import { CategoryCascadingSelect } from './CategoryCascadingSelect';
 
 interface InventoryViewProps {
   products: ProductItem[];
   profile: BusinessProfile;
+  currentUser?: AppUser;
+  categoryRecords?: CategoryRecord[];
+  onRefreshProducts?: () => void;
   onSaveProduct: (product: ProductItem) => void;
   onUpdateStock: (productId: string, newStock: number) => void;
   onToggleWinningItem: (productId: string) => void;
@@ -35,6 +58,9 @@ interface InventoryViewProps {
 export const InventoryView: React.FC<InventoryViewProps> = ({
   products,
   profile,
+  currentUser,
+  categoryRecords,
+  onRefreshProducts,
   onSaveProduct,
   onUpdateStock,
   onToggleWinningItem,
@@ -52,6 +78,12 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
   const [formName, setFormName] = useState('');
   const [formUrduName, setFormUrduName] = useState('');
   const [formCategory, setFormCategory] = useState('Cosmetics');
+  const [formParentCatId, setFormParentCatId] = useState<string>('');
+  const [formSubCatId, setFormSubCatId] = useState<string>('');
+  const [formChildCatId, setFormChildCatId] = useState<string>('');
+  const [formIsUpcoming, setFormIsUpcoming] = useState(false);
+  const [formExpectedArrivalDate, setFormExpectedArrivalDate] = useState('');
+  const [formDetails, setFormDetails] = useState('');
   const [formSku, setFormSku] = useState('');
   const [formCostPrice, setFormCostPrice] = useState('');
   const [formMarketPrice, setFormMarketPrice] = useState('');
@@ -62,11 +94,30 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
   const [formImageUrl, setFormImageUrl] = useState('');
   const [formWebsiteUrl, setFormWebsiteUrl] = useState('');
 
-  // Central category management (User directive: categories centrally managed & reusable across all products)
+  // Central category management (3-level records)
   const [centralCategories, setCentralCategories] = useState<string[]>(() => getCategories());
+  const [localCatRecords, setLocalCatRecords] = useState<CategoryRecord[]>(() => getCategoryRecords());
+  const effectiveCatRecords = categoryRecords && categoryRecords.length > 0 ? categoryRecords : localCatRecords;
   const [isCreatingNewCategory, setIsCreatingNewCategory] = useState(false);
   const [newCategoryInput, setNewCategoryInput] = useState('');
+  const [newCategoryParentId, setNewCategoryParentId] = useState('');
   const [categoryError, setCategoryError] = useState('');
+
+  // Arrival & Transfer Modal State (Upcoming -> Active Category)
+  const [arrivalTarget, setArrivalTarget] = useState<ProductItem | null>(null);
+  const [arrivalMainCatId, setArrivalMainCatId] = useState('');
+  const [arrivalSubCatId, setArrivalSubCatId] = useState<string | undefined>(undefined);
+  const [arrivalChildCatId, setArrivalChildCatId] = useState<string | undefined>(undefined);
+  const [arrivalOurPrice, setArrivalOurPrice] = useState('');
+  const [arrivalMarketPrice, setArrivalMarketPrice] = useState('');
+  const [arrivalCostPrice, setArrivalCostPrice] = useState('');
+  const [arrivalStockQty, setArrivalStockQty] = useState('25');
+  const [arrivalDetails, setArrivalDetails] = useState('');
+  const [arrivalVariations, setArrivalVariations] = useState<ProductVariation[]>([]);
+  const [arrivalError, setArrivalError] = useState('');
+  const [isActivatingArrival, setIsActivatingArrival] = useState(false);
+
+  const canActivateArrival = isUserAuthorizedForStockTransfer(currentUser);
 
   // Synchronize external import trigger if provided
   React.useEffect(() => {
@@ -76,18 +127,36 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
   }, [isExternalImportOpen]);
 
   // Keep central categories updated with existing product categories
-  const categories = centralCategories;
+  const categories = Array.from(
+    new Set([UPCOMING_CATEGORY_NAME, ...centralCategories])
+  ).sort((a, b) => a.localeCompare(b));
 
-  const handleCreateCategoryDirect = () => {
+  const handleCreateCategoryDirect = async () => {
     const trimmed = newCategoryInput.trim();
     if (!trimmed) {
       setCategoryError('Please enter a category name.');
       return;
     }
-    const result = addCategory(trimmed);
-    setCentralCategories(result.categories);
-    setFormCategory(trimmed);
+    const apiRes = await apiSaveCategoryRecord({
+      name: trimmed,
+      parentCategoryId: newCategoryParentId || undefined,
+      isActive: true,
+    });
+    if (!apiRes.ok) {
+      if (apiRes.error && apiRes.error.toLowerCase().includes('already exists')) {
+        setCategoryError(apiRes.error);
+        return;
+      }
+      const result = addCategory(trimmed, newCategoryParentId || undefined);
+      setCentralCategories(result.categories);
+      setLocalCatRecords(getCategoryRecords());
+    } else {
+      setCentralCategories(getCategories());
+      setLocalCatRecords(apiRes.categories || getCategoryRecords());
+    }
+    onRefreshProducts?.();
     setNewCategoryInput('');
+    setNewCategoryParentId('');
     setIsCreatingNewCategory(false);
     setCategoryError('');
   };
@@ -96,13 +165,18 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
   const totalStockCount = products.reduce((acc, p) => acc + p.stockQty, 0);
   const totalInventoryValuation = products.reduce((acc, p) => acc + p.ourPrice * p.stockQty, 0);
   const totalProfitGenerated = products.reduce((acc, p) => acc + p.totalProfit, 0);
-  const lowStockCount = products.filter((p) => p.stockQty <= p.minStockAlert).length;
+  const lowStockCount = products.filter((p) => !isProductPurchaseBlocked(p) && p.stockQty <= p.minStockAlert).length;
 
   // Winning items ranked by total profit
   const winningProducts = [...products].sort((a, b) => b.totalProfit - a.totalProfit).slice(0, 3);
 
   const filteredProducts = products.filter((p) => {
-    if (selectedCategory !== 'all' && p.category !== selectedCategory) return false;
+    if (
+      selectedCategory !== 'all' &&
+      !doesProductMatchCategoryFilter(p, selectedCategory, effectiveCatRecords)
+    ) {
+      return false;
+    }
     if (searchTerm.trim()) {
       const q = searchTerm.toLowerCase();
       const matchName = p.name.toLowerCase().includes(q);
@@ -114,16 +188,24 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
   });
 
   const handleOpenAddModal = (prod?: ProductItem) => {
+    setLocalCatRecords(getCategoryRecords());
     if (prod) {
       setEditingProduct(prod);
       setFormName(prod.name);
       setFormUrduName(prod.urduName || '');
       setFormCategory(prod.category);
+      const resolvedIds = resolveCategoryIdsFromProduct(prod, effectiveCatRecords);
+      setFormParentCatId(resolvedIds.parentCategoryId || '');
+      setFormSubCatId(resolvedIds.subcategoryId || '');
+      setFormChildCatId(resolvedIds.childSubcategoryId || '');
+      setFormIsUpcoming(isProductPurchaseBlocked(prod));
+      setFormExpectedArrivalDate(prod.expectedArrivalDate || '');
+      setFormDetails(prod.details || prod.description || '');
       setFormSku(prod.sku);
       setFormCostPrice(String(prod.costPrice));
       setFormMarketPrice(String(prod.marketPrice));
       setFormOurPrice(String(prod.ourPrice));
-      setFormStockQty(String(prod.stockQty));
+      setFormStockQty(isProductPurchaseBlocked(prod) ? '0' : String(prod.stockQty));
       setFormMinStock(String(prod.minStockAlert));
       setFormIsWinning(prod.isWinningItem);
       setFormImageUrl(prod.imageUrl || '');
@@ -132,7 +214,14 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
       setEditingProduct(null);
       setFormName('');
       setFormUrduName('');
-      setFormCategory(centralCategories[0] || 'Cosmetics');
+      const firstMain = effectiveCatRecords.find((c) => !c.parentCategoryId && !c.isUpcoming && c.isActive !== false);
+      setFormCategory(firstMain?.name || centralCategories[0] || 'Cosmetics');
+      setFormParentCatId(firstMain?.id || '');
+      setFormSubCatId('');
+      setFormChildCatId('');
+      setFormIsUpcoming(false);
+      setFormExpectedArrivalDate('');
+      setFormDetails('');
       setFormSku(`SKU-${Math.floor(1000 + Math.random() * 9000)}`);
       setFormCostPrice('');
       setFormMarketPrice('');
@@ -145,8 +234,71 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
     }
     setIsCreatingNewCategory(false);
     setNewCategoryInput('');
+    setNewCategoryParentId('');
     setCategoryError('');
     setIsAddModalOpen(true);
+  };
+
+  const handleOpenArrivalModal = (prod: ProductItem) => {
+    const freshCats = getCategoryRecords();
+    setLocalCatRecords(freshCats);
+    const defaultMain = freshCats.find((c) => !c.parentCategoryId && !c.isUpcoming && c.isActive !== false);
+    setArrivalTarget(prod);
+    setArrivalMainCatId(defaultMain?.id || '');
+    setArrivalSubCatId(undefined);
+    setArrivalChildCatId(undefined);
+    setArrivalOurPrice(String(prod.ourPrice || ''));
+    setArrivalMarketPrice(String(prod.marketPrice || ''));
+    setArrivalCostPrice(String(prod.costPrice || ''));
+    setArrivalStockQty(String(prod.stockQty > 0 ? prod.stockQty : 25));
+    setArrivalDetails(prod.details || prod.description || '');
+    setArrivalVariations(prod.variations ? prod.variations.map((v) => ({ ...v })) : []);
+    setArrivalError('');
+  };
+
+  const handleSubmitArrivalActivation = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!arrivalTarget) return;
+    setArrivalError('');
+
+    if (!arrivalMainCatId || arrivalMainCatId === UPCOMING_CATEGORY_ID) {
+      setArrivalError('Please select a target active Main Category outside Upcoming Viral Products.');
+      return;
+    }
+
+    const qty = parseInt(arrivalStockQty, 10) || 0;
+    if (qty <= 0) {
+      setArrivalError('Initial physical stock quantity must be greater than 0.');
+      return;
+    }
+
+    const ourP = parseFloat(arrivalOurPrice) || 0;
+    if (ourP <= 0) {
+      setArrivalError('Selling price must be greater than 0.');
+      return;
+    }
+
+    setIsActivatingArrival(true);
+    const res = await apiActivateProductArrival(arrivalTarget.id, {
+      parentCategoryId: arrivalMainCatId,
+      subcategoryId: arrivalSubCatId,
+      childSubcategoryId: arrivalChildCatId,
+      ourPrice: ourP,
+      marketPrice: parseFloat(arrivalMarketPrice) || ourP,
+      costPrice: parseFloat(arrivalCostPrice) || 0,
+      stockQty: qty,
+      variations: arrivalVariations.length > 0 ? arrivalVariations : undefined,
+      details: arrivalDetails.trim() || undefined,
+    });
+    setIsActivatingArrival(false);
+
+    if (!res.ok) {
+      setArrivalError(res.error || 'Failed to activate arrived product.');
+      return;
+    }
+
+    onRefreshProducts?.();
+    setArrivalTarget(null);
   };
 
   const handleSaveSubmit = (e: React.FormEvent) => {
@@ -154,19 +306,30 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
     const cost = parseFloat(formCostPrice) || 0;
     const market = parseFloat(formMarketPrice) || 0;
     const our = parseFloat(formOurPrice) || 0;
-    const stock = parseInt(formStockQty, 10) || 0;
+    const isUpcomingItem = formIsUpcoming || formParentCatId === UPCOMING_CATEGORY_ID;
+    const stock = isUpcomingItem ? 0 : Math.max(0, parseInt(formStockQty, 10) || 0);
     const minStock = parseInt(formMinStock, 10) || 10;
 
-    const assignedCategory = formCategory.trim() || 'General';
-    // Persist category centrally so it is available for all products
-    const catResult = addCategory(assignedCategory);
-    setCentralCategories(catResult.categories);
+    const assignedCategory = isUpcomingItem
+      ? UPCOMING_CATEGORY_NAME
+      : formParentCatId
+      ? getCategoryBreadcrumb(effectiveCatRecords, formParentCatId, formSubCatId || undefined, formChildCatId || undefined, formCategory)
+      : formCategory.trim() || 'General';
+
+    if (!isUpcomingItem) {
+      const catResult = addCategory(assignedCategory);
+      setCentralCategories(catResult.categories);
+    }
 
     const prodToSave: ProductItem = {
+      ...(editingProduct || {}),
       id: editingProduct ? editingProduct.id : `prod_${Date.now()}`,
       name: formName.trim(),
       urduName: formUrduName.trim() || undefined,
       category: assignedCategory,
+      parentCategoryId: isUpcomingItem ? UPCOMING_CATEGORY_ID : formParentCatId || undefined,
+      subcategoryId: isUpcomingItem ? undefined : formSubCatId || undefined,
+      childSubcategoryId: isUpcomingItem ? undefined : formChildCatId || undefined,
       sku: formSku.trim() || `SKU-${Date.now()}`,
       costPrice: cost,
       marketPrice: market,
@@ -177,9 +340,14 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
       totalRevenue: editingProduct ? editingProduct.totalRevenue : 0,
       totalProfit: editingProduct ? (our - cost) * editingProduct.salesCount : 0,
       isWinningItem: formIsWinning,
+      isUpcoming: isUpcomingItem,
+      upcomingStatus: isUpcomingItem ? 'coming_soon' : 'available',
+      expectedArrivalDate: isUpcomingItem ? formExpectedArrivalDate.trim() || undefined : undefined,
+      details: formDetails.trim() || editingProduct?.details,
       imageUrl: formImageUrl.trim() || undefined,
       websiteUrl: formWebsiteUrl.trim() || undefined,
       createdAt: editingProduct ? editingProduct.createdAt : new Date().toISOString().split('T')[0],
+      updatedAt: new Date().toISOString(),
     };
 
     onSaveProduct(prodToSave);
@@ -363,18 +531,31 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
             <tbody className="divide-y divide-slate-100 dark:divide-slate-800">
               {filteredProducts.map((p) => {
                 const savings = p.marketPrice - p.ourPrice;
-                const savingsPct = Math.round((savings / p.marketPrice) * 100);
-                const isLowStock = p.stockQty <= p.minStockAlert;
+                const savingsPct = p.marketPrice > 0 ? Math.round((savings / p.marketPrice) * 100) : 0;
+                const isUpcomingBlocked = isProductPurchaseBlocked(p);
+                const isLowStock = !isUpcomingBlocked && p.stockQty <= p.minStockAlert;
 
                 return (
                   <tr key={p.id} className="hover:bg-slate-50/60 dark:hover:bg-slate-800/40">
                     <td className="py-3 px-3">
-                      <p className="font-bold text-slate-900 dark:text-white line-clamp-1">
-                        {p.name}
-                      </p>
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <p className="font-bold text-slate-900 dark:text-white line-clamp-1">
+                          {p.name}
+                        </p>
+                        {isUpcomingBlocked && (
+                          <span className="px-1.5 py-0.5 rounded bg-purple-100 dark:bg-purple-950 text-purple-800 dark:text-purple-300 text-[9px] font-black uppercase">
+                            Coming Soon
+                          </span>
+                        )}
+                      </div>
                       {p.urduName && (
                         <p className="font-urdu text-[11px] text-slate-500 mt-0.5">
                           {p.urduName}
+                        </p>
+                      )}
+                      {isUpcomingBlocked && p.expectedArrivalDate && (
+                        <p className="text-[10px] text-purple-600 dark:text-purple-400 font-semibold mt-0.5">
+                          Expected Arrival: {p.expectedArrivalDate}
                         </p>
                       )}
                     </td>
@@ -399,13 +580,19 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                       {profile.currencySymbol}{savings.toLocaleString('en-PK')} ({savingsPct}%)
                     </td>
                     <td className="py-3 px-3 text-center">
-                      <span className={`inline-block font-mono font-bold px-2 py-0.5 rounded text-[11px] ${
-                        isLowStock
-                          ? 'bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300'
-                          : 'bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-200'
-                      }`}>
-                        {p.stockQty}
-                      </span>
+                      {isUpcomingBlocked ? (
+                        <span className="inline-block font-mono font-bold px-2 py-0.5 rounded text-[10px] bg-purple-100 text-purple-800 dark:bg-purple-950 dark:text-purple-300">
+                          0 (Upcoming)
+                        </span>
+                      ) : (
+                        <span className={`inline-block font-mono font-bold px-2 py-0.5 rounded text-[11px] ${
+                          isLowStock
+                            ? 'bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300'
+                            : 'bg-slate-100 text-slate-800 dark:bg-slate-800 dark:text-slate-200'
+                        }`}>
+                          {p.stockQty}
+                        </span>
+                      )}
                     </td>
                     <td className="py-3 px-3 text-center">
                       <button
@@ -421,20 +608,35 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                       </button>
                     </td>
                     <td className="py-3 px-3 text-right">
-                      <div className="inline-flex items-center gap-1 font-mono">
-                        <button
-                          onClick={() => onUpdateStock(p.id, p.stockQty + 10)}
-                          className="px-1.5 py-0.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded text-[10px] cursor-pointer"
-                        >
-                          +10
-                        </button>
-                        <button
-                          onClick={() => onUpdateStock(p.id, p.stockQty + 50)}
-                          className="px-1.5 py-0.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded text-[10px] cursor-pointer"
-                        >
-                          +50
-                        </button>
-                      </div>
+                      {isUpcomingBlocked ? (
+                        canActivateArrival ? (
+                          <button
+                            type="button"
+                            onClick={() => handleOpenArrivalModal(p)}
+                            className="inline-flex items-center gap-1 px-2.5 py-1 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-[10px] rounded-lg cursor-pointer shadow-2xs whitespace-nowrap"
+                          >
+                            <CheckCircle2 className="w-3 h-3" />
+                            <span>Confirm Arrival &amp; Activate</span>
+                          </button>
+                        ) : (
+                          <span className="text-[10px] text-slate-400 italic">Admin/Stock Mgr Only</span>
+                        )
+                      ) : (
+                        <div className="inline-flex items-center gap-1 font-mono">
+                          <button
+                            onClick={() => onUpdateStock(p.id, p.stockQty + 10)}
+                            className="px-1.5 py-0.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded text-[10px] cursor-pointer"
+                          >
+                            +10
+                          </button>
+                          <button
+                            onClick={() => onUpdateStock(p.id, p.stockQty + 50)}
+                            className="px-1.5 py-0.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 rounded text-[10px] cursor-pointer"
+                          >
+                            +50
+                          </button>
+                        </div>
+                      )}
                     </td>
                     <td className="py-3 px-3 text-right">
                       <div className="flex items-center justify-end gap-1.5">
@@ -514,85 +716,144 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                 />
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div className="space-y-1.5">
-                  <div className="flex items-center justify-between">
-                    <label className="font-bold text-slate-800 dark:text-slate-200 block text-xs">
-                      Category (مرکزی کیٹیگری) *
-                    </label>
-                    {!isCreatingNewCategory && (
-                      <button
-                        type="button"
-                        onClick={() => setIsCreatingNewCategory(true)}
-                        className="text-[11px] font-bold text-amber-600 dark:text-amber-400 hover:underline cursor-pointer"
-                      >
-                        + New Category
-                      </button>
-                    )}
-                  </div>
-
-                  {!isCreatingNewCategory ? (
-                    <select
-                      value={formCategory}
+              {/* 3-Level Category Hierarchy & Upcoming Toggle */}
+              <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-850 border border-slate-200 dark:border-slate-800 space-y-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <label className="flex items-center gap-2 font-bold text-purple-800 dark:text-purple-300 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={formIsUpcoming}
                       onChange={(e) => {
-                        if (e.target.value === '__NEW__') {
-                          setIsCreatingNewCategory(true);
+                        const checked = e.target.checked;
+                        setFormIsUpcoming(checked);
+                        if (checked) {
+                          setFormParentCatId(UPCOMING_CATEGORY_ID);
+                          setFormSubCatId('');
+                          setFormChildCatId('');
+                          setFormCategory(UPCOMING_CATEGORY_NAME);
+                          setFormStockQty('0');
                         } else {
-                          setFormCategory(e.target.value);
+                          const firstMain = effectiveCatRecords.find(
+                            (c) => !c.parentCategoryId && !c.isUpcoming && c.isActive !== false
+                          );
+                          setFormParentCatId(firstMain?.id || '');
+                          setFormCategory(firstMain?.name || 'Cosmetics');
                         }
                       }}
-                      className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-xs font-semibold focus:ring-2 focus:ring-amber-400 focus:outline-hidden cursor-pointer"
-                      required
+                      className="w-4 h-4 rounded text-purple-600"
+                    />
+                    <span>Upcoming Viral Product (Coming Soon / Non-Purchasable)</span>
+                  </label>
+
+                  {!isCreatingNewCategory && !formIsUpcoming && (
+                    <button
+                      type="button"
+                      onClick={() => setIsCreatingNewCategory(true)}
+                      className="text-[11px] font-bold text-amber-600 dark:text-amber-400 hover:underline cursor-pointer"
                     >
-                      <option value="">Select Existing Category...</option>
-                      {centralCategories.map((c) => (
-                        <option key={c} value={c}>
-                          {c}
-                        </option>
-                      ))}
-                      <option value="__NEW__">+ Create New Category (نئی کیٹیگری بنائیں)...</option>
-                    </select>
-                  ) : (
-                    <div className="space-y-1.5 p-2 bg-amber-50 dark:bg-amber-950/40 rounded-lg border border-amber-200 dark:border-amber-800">
-                      <span className="text-[10px] font-bold text-amber-900 dark:text-amber-200 block">
-                        New Category (مرکزی ڈیٹا بیس میں محفوظ ہوگی):
-                      </span>
-                      <div className="flex gap-1.5">
-                        <input
-                          type="text"
-                          value={newCategoryInput}
-                          onChange={(e) => {
-                            setNewCategoryInput(e.target.value);
-                            setCategoryError('');
-                          }}
-                          placeholder="e.g. Health & Beauty"
-                          className="flex-1 px-2.5 py-1 text-xs rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-hidden"
-                          autoFocus
-                        />
-                        <button
-                          type="button"
-                          onClick={handleCreateCategoryDirect}
-                          className="px-2.5 py-1 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs rounded-lg cursor-pointer"
-                        >
-                          Save
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setIsCreatingNewCategory(false);
-                            setCategoryError('');
-                          }}
-                          className="px-2 py-1 text-xs text-slate-500 hover:text-slate-800 cursor-pointer"
-                        >
-                          Cancel
-                        </button>
-                      </div>
-                      {categoryError && (
-                        <p className="text-[10px] text-red-500 font-medium">{categoryError}</p>
-                      )}
-                    </div>
+                      + Quick Add Category / Subcategory
+                    </button>
                   )}
                 </div>
+
+                {formIsUpcoming ? (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-2.5 rounded-lg bg-purple-50 dark:bg-purple-950/30 border border-purple-200 dark:border-purple-800">
+                    <div>
+                      <span className="text-[10px] font-bold uppercase text-purple-700 dark:text-purple-300 block mb-1">
+                        Assigned Category
+                      </span>
+                      <div className="px-3 py-2 rounded-lg bg-white dark:bg-slate-900 border border-purple-200 dark:border-purple-800 font-bold text-purple-900 dark:text-purple-200">
+                        {UPCOMING_CATEGORY_NAME}
+                      </div>
+                    </div>
+                    <div>
+                      <label className="text-[10px] font-bold uppercase text-purple-700 dark:text-purple-300 block mb-1">
+                        Expected Arrival Date (Optional)
+                      </label>
+                      <input
+                        type="date"
+                        value={formExpectedArrivalDate}
+                        onChange={(e) => setFormExpectedArrivalDate(e.target.value)}
+                        className="w-full px-3 py-2 rounded-lg border border-purple-300 dark:border-purple-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-mono"
+                      />
+                    </div>
+                  </div>
+                ) : (
+                  <CategoryCascadingSelect
+                    categories={effectiveCatRecords}
+                    parentCategoryId={formParentCatId}
+                    subcategoryId={formSubCatId}
+                    childSubcategoryId={formChildCatId}
+                    excludeUpcoming={false}
+                    onChange={(sel) => {
+                      setFormParentCatId(sel.parentCategoryId);
+                      setFormSubCatId(sel.subcategoryId || '');
+                      setFormChildCatId(sel.childSubcategoryId || '');
+                      setFormCategory(sel.breadcrumb);
+                      if (sel.isUpcoming) {
+                        setFormIsUpcoming(true);
+                        setFormStockQty('0');
+                      }
+                    }}
+                  />
+                )}
+
+                {isCreatingNewCategory && (
+                  <div className="space-y-2 p-2.5 bg-amber-50 dark:bg-amber-950/40 rounded-lg border border-amber-200 dark:border-amber-800">
+                    <span className="text-[10px] font-bold text-amber-900 dark:text-amber-200 block">
+                      Quick Create Category / Subcategory:
+                    </span>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <input
+                        type="text"
+                        value={newCategoryInput}
+                        onChange={(e) => {
+                          setNewCategoryInput(e.target.value);
+                          setCategoryError('');
+                        }}
+                        placeholder="Category / Subcategory Name"
+                        className="px-2.5 py-1.5 text-xs rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-hidden"
+                      />
+                      <select
+                        value={newCategoryParentId}
+                        onChange={(e) => setNewCategoryParentId(e.target.value)}
+                        className="px-2.5 py-1.5 text-xs rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
+                      >
+                        <option value="">Top-Level Main Category (L1)</option>
+                        {effectiveCatRecords
+                          .filter((c) => !c.isUpcoming && c.id !== UPCOMING_CATEGORY_ID)
+                          .map((c) => (
+                            <option key={c.id} value={c.id}>
+                              Under: {c.name}
+                            </option>
+                          ))}
+                      </select>
+                    </div>
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={handleCreateCategoryDirect}
+                        className="px-3 py-1 bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs rounded-lg cursor-pointer"
+                      >
+                        Save Category
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsCreatingNewCategory(false);
+                          setCategoryError('');
+                        }}
+                        className="px-2 py-1 text-xs text-slate-500 hover:text-slate-800 cursor-pointer"
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                    {categoryError && <p className="text-[10px] text-red-500 font-medium">{categoryError}</p>}
+                  </div>
+                )}
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div className="space-y-1">
                   <label className="font-bold text-slate-800 dark:text-slate-200 block">
                     SKU Code
@@ -603,6 +864,18 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                     onChange={(e) => setFormSku(e.target.value)}
                     placeholder="WASH-3PC-001"
                     className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-mono focus:outline-hidden"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <label className="font-bold text-slate-800 dark:text-slate-200 block">
+                    Specifications / Short Details
+                  </label>
+                  <input
+                    type="text"
+                    value={formDetails}
+                    onChange={(e) => setFormDetails(e.target.value)}
+                    placeholder="Key specs, quality grade, size details..."
+                    className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:outline-hidden"
                   />
                 </div>
               </div>
@@ -637,7 +910,7 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
                 </div>
                 <div className="space-y-1">
                   <label className="font-bold text-amber-700 dark:text-amber-400 block">
-                    Our Price (ہماری قیمت)
+                    {formIsUpcoming ? 'Expected Price' : 'Our Price (ہماری قیمت)'}
                   </label>
                   <input
                     type="number"
@@ -654,15 +927,16 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
               <div className="grid grid-cols-3 gap-3">
                 <div className="space-y-1">
                   <label className="font-bold text-slate-800 dark:text-slate-200 block">
-                    Initial Stock Qty
+                    {formIsUpcoming ? 'Stock Locked (0)' : 'Initial Stock Qty'}
                   </label>
                   <input
                     type="number"
-                    value={formStockQty}
+                    disabled={formIsUpcoming}
+                    value={formIsUpcoming ? '0' : formStockQty}
                     onChange={(e) => setFormStockQty(e.target.value)}
                     placeholder="50"
-                    className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-mono"
-                    required
+                    className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-mono disabled:opacity-60"
+                    required={!formIsUpcoming}
                   />
                 </div>
                 <div className="space-y-1">
@@ -742,7 +1016,177 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
         </div>
       )}
 
-      {/* 5. COMPLETE WEBSITE PRODUCT IMPORTER MODAL */}
+      {/* 5. CONFIRM PHYSICAL ARRIVAL & CATEGORY TRANSFER MODAL */}
+      {arrivalTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/75 backdrop-blur-xs p-3 sm:p-4 overflow-y-auto">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl w-full max-w-2xl overflow-hidden shadow-2xl my-8">
+            <div className="bg-emerald-600 px-5 py-3.5 flex items-center justify-between text-white">
+              <div className="flex items-center gap-2">
+                <CheckCircle2 className="w-5 h-5" />
+                <div>
+                  <h3 className="text-sm sm:text-base font-extrabold">
+                    Confirm Physical Arrival &amp; Activate Product
+                  </h3>
+                  <p className="text-[11px] text-emerald-100">
+                    Move "{arrivalTarget.name}" out of Coming Soon into active storefront stock
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setArrivalTarget(null)}
+                className="p-1 hover:bg-emerald-500 rounded-lg cursor-pointer"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSubmitArrivalActivation} className="p-5 space-y-4 text-xs">
+              {arrivalError && (
+                <div className="p-3 rounded-xl bg-red-50 dark:bg-red-950/50 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 flex items-center gap-2 font-semibold">
+                  <ShieldAlert className="w-4 h-4 shrink-0" />
+                  <span>{arrivalError}</span>
+                </div>
+              )}
+
+              <CategoryCascadingSelect
+                categories={effectiveCatRecords}
+                parentCategoryId={arrivalMainCatId}
+                subcategoryId={arrivalSubCatId}
+                childSubcategoryId={arrivalChildCatId}
+                excludeUpcoming={true}
+                label="Target Storefront Category (Main → Subcategory → Child Subcategory)"
+                onChange={(sel) => {
+                  setArrivalMainCatId(sel.parentCategoryId);
+                  setArrivalSubCatId(sel.subcategoryId);
+                  setArrivalChildCatId(sel.childSubcategoryId);
+                }}
+              />
+
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-slate-50 dark:bg-slate-850 p-3 rounded-xl border border-slate-200 dark:border-slate-800">
+                <div>
+                  <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">
+                    Cost Price
+                  </label>
+                  <input
+                    type="number"
+                    value={arrivalCostPrice}
+                    onChange={(e) => setArrivalCostPrice(e.target.value)}
+                    className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">
+                    Market Price
+                  </label>
+                  <input
+                    type="number"
+                    value={arrivalMarketPrice}
+                    onChange={(e) => setArrivalMarketPrice(e.target.value)}
+                    className="w-full px-2.5 py-1.5 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="font-bold text-emerald-700 dark:text-emerald-400 block mb-1">
+                    Selling Price *
+                  </label>
+                  <input
+                    type="number"
+                    required
+                    min="1"
+                    value={arrivalOurPrice}
+                    onChange={(e) => setArrivalOurPrice(e.target.value)}
+                    className="w-full px-2.5 py-1.5 rounded-lg border border-emerald-400 dark:border-emerald-700 bg-white dark:bg-slate-800 font-mono font-bold"
+                  />
+                </div>
+                <div>
+                  <label className="font-bold text-amber-700 dark:text-amber-400 block mb-1">
+                    Arrived Stock Qty *
+                  </label>
+                  <input
+                    type="number"
+                    required
+                    min="1"
+                    value={arrivalStockQty}
+                    onChange={(e) => setArrivalStockQty(e.target.value)}
+                    className="w-full px-2.5 py-1.5 rounded-lg border border-amber-400 dark:border-amber-700 bg-white dark:bg-slate-800 font-mono font-bold"
+                  />
+                </div>
+              </div>
+
+              {arrivalVariations.length > 0 && (
+                <div className="space-y-2">
+                  <span className="font-bold text-slate-700 dark:text-slate-300 block">
+                    Confirm Arrived Variation Stock &amp; Pricing ({arrivalVariations.length})
+                  </span>
+                  <div className="max-h-40 overflow-y-auto divide-y divide-slate-100 dark:divide-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg">
+                    {arrivalVariations.map((v, idx) => (
+                      <div key={v.id || idx} className="p-2 flex items-center justify-between gap-2">
+                        <span className="font-semibold text-slate-800 dark:text-slate-200 truncate flex-1">
+                          {[v.size, v.color].filter(Boolean).join(' · ') || v.sku}
+                        </span>
+                        <input
+                          type="number"
+                          value={v.salePrice}
+                          onChange={(e) => {
+                            const next = [...arrivalVariations];
+                            next[idx] = { ...next[idx], salePrice: parseFloat(e.target.value) || 0 };
+                            setArrivalVariations(next);
+                          }}
+                          className="w-24 px-2 py-1 rounded border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 font-mono"
+                          placeholder="Price"
+                        />
+                        <input
+                          type="number"
+                          value={v.stockQty}
+                          onChange={(e) => {
+                            const next = [...arrivalVariations];
+                            next[idx] = { ...next[idx], stockQty: parseInt(e.target.value, 10) || 0 };
+                            setArrivalVariations(next);
+                          }}
+                          className="w-20 px-2 py-1 rounded border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 font-mono"
+                          placeholder="Qty"
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              <div>
+                <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">
+                  Updated Details / Specifications
+                </label>
+                <textarea
+                  rows={2}
+                  value={arrivalDetails}
+                  onChange={(e) => setArrivalDetails(e.target.value)}
+                  className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
+                />
+              </div>
+
+              <div className="pt-3 border-t border-slate-200 dark:border-slate-800 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setArrivalTarget(null)}
+                  className="px-4 py-2 text-slate-600 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isActivatingArrival}
+                  className="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-black rounded-xl shadow-xs cursor-pointer disabled:opacity-60"
+                >
+                  {isActivatingArrival ? 'Activating...' : 'Confirm Physical Arrival & Publish Live'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* 6. COMPLETE WEBSITE PRODUCT IMPORTER MODAL */}
       <ProductImporterModal
         isOpen={isImportModalOpen}
         onClose={() => {
@@ -753,6 +1197,8 @@ export const InventoryView: React.FC<InventoryViewProps> = ({
         onSaveProduct={(importedProduct) => {
           onSaveProduct(importedProduct);
           setCentralCategories(getCategories());
+          setLocalCatRecords(getCategoryRecords());
+          onRefreshProducts?.();
         }}
       />
     </div>

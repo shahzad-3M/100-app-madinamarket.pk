@@ -23,13 +23,21 @@ import {
   DollarSign,
   Package,
 } from 'lucide-react';
-import { ProductItem, ProductVariation, ProductImportLog } from '../types';
+import { ProductItem, ProductVariation, ProductImportLog, CategoryRecord } from '../types';
 import {
   getCategories,
   addCategory,
+  getCategoryRecords,
   getProductImportLogs,
   logProductImport,
 } from '../utils/storage';
+import {
+  UPCOMING_CATEGORY_ID,
+  UPCOMING_CATEGORY_NAME,
+  resolveCategoryIdsFromProduct,
+  getCategoryBreadcrumb,
+} from '../utils/locationCategoryHelpers';
+import { CategoryCascadingSelect } from './CategoryCascadingSelect';
 
 interface ProductImporterModalProps {
   isOpen: boolean;
@@ -99,9 +107,15 @@ export const ProductImporterModal: React.FC<ProductImporterModalProps> = ({
   const [duplicateMatch, setDuplicateMatch] = useState<ProductItem | null>(null);
   const [overwriteConfirmed, setOverwriteConfirmed] = useState<boolean>(false);
 
-  // Category Selection
+  // Category Selection (3-Level Hierarchy + Upcoming)
+  const [categoryRecords, setCategoryRecords] = useState<CategoryRecord[]>(getCategoryRecords);
   const [categoryMode, setCategoryMode] = useState<'existing' | 'new'>('existing');
   const [selectedCategory, setSelectedCategory] = useState<string>('');
+  const [selectedMainCatId, setSelectedMainCatId] = useState<string>('');
+  const [selectedSubCatId, setSelectedSubCatId] = useState<string>('');
+  const [selectedChildCatId, setSelectedChildCatId] = useState<string>('');
+  const [importAsUpcoming, setImportAsUpcoming] = useState<boolean>(false);
+  const [upcomingArrivalDate, setUpcomingArrivalDate] = useState<string>('');
   const [newCategoryName, setNewCategoryName] = useState<string>('');
   const [parentCategory, setParentCategory] = useState<string>('');
 
@@ -178,6 +192,13 @@ export const ProductImporterModal: React.FC<ProductImporterModalProps> = ({
                 setDuplicateMatch(existingMatch);
               }
 
+              const freshCatRecords = getCategoryRecords();
+              setCategoryRecords(freshCatRecords);
+              const resolvedIds = resolveCategoryIdsFromProduct(parsed, freshCatRecords);
+              setSelectedMainCatId(resolvedIds.parentCategoryId || '');
+              setSelectedSubCatId(resolvedIds.subcategoryId || '');
+              setSelectedChildCatId(resolvedIds.childSubcategoryId || '');
+              setImportAsUpcoming(Boolean(parsed.isUpcoming));
               setExtractedProduct(parsed);
               setSelectedCategory(parsed.category);
               setIsLoading(false);
@@ -685,20 +706,51 @@ export const ProductImporterModal: React.FC<ProductImporterModalProps> = ({
   const handleApproveAndSave = (publishImmediately: boolean) => {
     if (!extractedProduct) return;
 
-    // Determine category
-    const finalCat =
-      categoryMode === 'new'
-        ? (newCategoryName.trim() || 'General Wholesale')
-        : (selectedCategory || extractedProduct.category || 'General Wholesale');
+    const freshRecords = getCategoryRecords();
+    let finalParentId: string | undefined = selectedMainCatId || undefined;
+    let finalSubId: string | undefined = selectedSubCatId || undefined;
+    let finalChildId: string | undefined = selectedChildCatId || undefined;
+    let fullCat = selectedCategory || extractedProduct.category || 'General Wholesale';
+    const isUpcomingItem = importAsUpcoming || finalParentId === UPCOMING_CATEGORY_ID;
 
-    const fullCat = parentCategory.trim() ? `${parentCategory.trim()} > ${finalCat}` : finalCat;
-
-    addCategory(fullCat);
+    if (isUpcomingItem) {
+      finalParentId = UPCOMING_CATEGORY_ID;
+      finalSubId = undefined;
+      finalChildId = undefined;
+      fullCat = UPCOMING_CATEGORY_NAME;
+    } else if (categoryMode === 'new') {
+      const leafName = newCategoryName.trim() || 'General Wholesale';
+      const parentName = parentCategory.trim();
+      if (parentName) {
+        const pRes = addCategory(parentName);
+        const pRec = getCategoryRecords().find((r) => !r.parentCategoryId && r.name.toLowerCase() === parentName.toLowerCase());
+        const cRes = addCategory(leafName, pRec?.id);
+        finalParentId = pRec?.id;
+        finalSubId = cRes.record?.id;
+        fullCat = `${parentName} > ${leafName}`;
+      } else {
+        const res = addCategory(leafName);
+        finalParentId = res.record?.id;
+        fullCat = leafName;
+      }
+    } else if (finalParentId) {
+      fullCat = getCategoryBreadcrumb(freshRecords, finalParentId, finalSubId, finalChildId, fullCat);
+    } else {
+      addCategory(fullCat);
+    }
 
     const productToSave: ProductItem = {
       ...extractedProduct,
       category: fullCat,
+      parentCategoryId: finalParentId,
+      subcategoryId: finalSubId,
+      childSubcategoryId: finalChildId,
+      isUpcoming: isUpcomingItem,
+      upcomingStatus: isUpcomingItem ? 'coming_soon' : 'available',
+      expectedArrivalDate: isUpcomingItem ? (upcomingArrivalDate.trim() || extractedProduct.expectedArrivalDate) : undefined,
+      stockQty: isUpcomingItem ? 0 : extractedProduct.stockQty,
       status: publishImmediately ? 'published' : (isDraft ? 'draft' : 'published'),
+      updatedAt: new Date().toISOString(),
     };
 
     onSaveProduct(productToSave);
@@ -1117,58 +1169,104 @@ export const ProductImporterModal: React.FC<ProductImporterModalProps> = ({
                     </div>
                   </div>
 
-                  {/* 3. CATEGORY ASSIGNMENT */}
+                  {/* 3. CATEGORY ASSIGNMENT (3-LEVEL HIERARCHY & UPCOMING) */}
                   <div className="space-y-3 bg-slate-50 dark:bg-slate-950/40 p-4 rounded-xl border border-slate-200 dark:border-slate-800">
-                    <div className="flex items-center justify-between">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
                       <span className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
                         <Layers className="w-4 h-4 text-amber-500" />
-                        Category &amp; Parent Group Assignment
+                        Category Hierarchy &amp; Status
                       </span>
                       <div className="flex items-center gap-2">
-                        <button
-                          type="button"
-                          onClick={() => setCategoryMode('existing')}
-                          className={`text-xs px-2.5 py-1 rounded cursor-pointer font-bold ${
-                            categoryMode === 'existing'
-                              ? 'bg-amber-500 text-slate-950'
-                              : 'bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
-                          }`}
-                        >
-                          Select Existing
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setCategoryMode('new')}
-                          className={`text-xs px-2.5 py-1 rounded cursor-pointer font-bold ${
-                            categoryMode === 'new'
-                              ? 'bg-amber-500 text-slate-950'
-                              : 'bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
-                          }`}
-                        >
-                          + Create New
-                        </button>
+                        <label className="text-xs font-bold text-purple-700 dark:text-purple-300 flex items-center gap-1 cursor-pointer mr-2">
+                          <input
+                            type="checkbox"
+                            checked={importAsUpcoming}
+                            onChange={(e) => {
+                              const checked = e.target.checked;
+                              setImportAsUpcoming(checked);
+                              if (checked) {
+                                setSelectedMainCatId(UPCOMING_CATEGORY_ID);
+                                setSelectedSubCatId('');
+                                setSelectedChildCatId('');
+                                setSelectedCategory(UPCOMING_CATEGORY_NAME);
+                                if (extractedProduct) {
+                                  setExtractedProduct({ ...extractedProduct, stockQty: 0, isUpcoming: true });
+                                }
+                              }
+                            }}
+                            className="rounded text-purple-600"
+                          />
+                          <span>Coming Soon / Upcoming</span>
+                        </label>
+                        {!importAsUpcoming && (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => setCategoryMode('existing')}
+                              className={`text-xs px-2.5 py-1 rounded cursor-pointer font-bold ${
+                                categoryMode === 'existing'
+                                  ? 'bg-amber-500 text-slate-950'
+                                  : 'bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
+                              }`}
+                            >
+                              Select Hierarchy
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setCategoryMode('new')}
+                              className={`text-xs px-2.5 py-1 rounded cursor-pointer font-bold ${
+                                categoryMode === 'new'
+                                  ? 'bg-amber-500 text-slate-950'
+                                  : 'bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-400'
+                              }`}
+                            >
+                              + Create New
+                            </button>
+                          </>
+                        )}
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      {categoryMode === 'existing' ? (
+                    {importAsUpcoming ? (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3 rounded-lg bg-purple-50 dark:bg-purple-950/30 border border-purple-200 dark:border-purple-800">
                         <div>
-                          <label className="text-[11px] text-slate-500 block mb-1">
-                            Choose Category
-                          </label>
-                          <select
-                            value={selectedCategory}
-                            onChange={(e) => setSelectedCategory(e.target.value)}
-                            className="w-full px-3 py-2 text-xs bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
-                          >
-                            {categories.map((cat) => (
-                              <option key={cat} value={cat}>
-                                {cat}
-                              </option>
-                            ))}
-                          </select>
+                          <span className="text-[11px] font-bold text-purple-800 dark:text-purple-200 block mb-1">
+                            Upcoming Category (Stock locked at 0 until Arrival Confirmed)
+                          </span>
+                          <div className="px-3 py-2 text-xs font-bold rounded-lg bg-white dark:bg-slate-900 border border-purple-200 dark:border-purple-800 text-purple-900 dark:text-purple-200">
+                            {UPCOMING_CATEGORY_NAME}
+                          </div>
                         </div>
-                      ) : (
+                        <div>
+                          <label className="text-[11px] font-bold text-purple-800 dark:text-purple-200 block mb-1">
+                            Expected Arrival Date (Optional)
+                          </label>
+                          <input
+                            type="date"
+                            value={upcomingArrivalDate}
+                            onChange={(e) => setUpcomingArrivalDate(e.target.value)}
+                            className="w-full px-3 py-2 text-xs bg-white dark:bg-slate-900 border border-purple-300 dark:border-purple-700 rounded-lg text-slate-900 dark:text-white font-mono"
+                          />
+                        </div>
+                      </div>
+                    ) : categoryMode === 'existing' ? (
+                      <CategoryCascadingSelect
+                        categories={categoryRecords}
+                        parentCategoryId={selectedMainCatId}
+                        subcategoryId={selectedSubCatId}
+                        childSubcategoryId={selectedChildCatId}
+                        onChange={(sel) => {
+                          setSelectedMainCatId(sel.parentCategoryId);
+                          setSelectedSubCatId(sel.subcategoryId || '');
+                          setSelectedChildCatId(sel.childSubcategoryId || '');
+                          setSelectedCategory(sel.breadcrumb);
+                          if (sel.isUpcoming) {
+                            setImportAsUpcoming(true);
+                          }
+                        }}
+                      />
+                    ) : (
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                         <div>
                           <label className="text-[11px] text-slate-500 block mb-1">
                             New Category Name
@@ -1177,25 +1275,24 @@ export const ProductImporterModal: React.FC<ProductImporterModalProps> = ({
                             type="text"
                             value={newCategoryName}
                             onChange={(e) => setNewCategoryName(e.target.value)}
-                            placeholder="e.g. Health & Wellness Lot"
+                            placeholder="e.g. Shalwar Kameez"
                             className="w-full px-3 py-2 text-xs bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
                           />
                         </div>
-                      )}
-
-                      <div>
-                        <label className="text-[11px] text-slate-500 block mb-1">
-                          Parent Group (Optional, e.g. Electronics, Cosmetics)
-                        </label>
-                        <input
-                          type="text"
-                          value={parentCategory}
-                          onChange={(e) => setParentCategory(e.target.value)}
-                          placeholder="e.g. Cosmetics &amp; Personal Care"
-                          className="w-full px-3 py-2 text-xs bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
-                        />
+                        <div>
+                          <label className="text-[11px] text-slate-500 block mb-1">
+                            Parent Group (Optional, e.g. Fashion &amp; Apparel)
+                          </label>
+                          <input
+                            type="text"
+                            value={parentCategory}
+                            onChange={(e) => setParentCategory(e.target.value)}
+                            placeholder="e.g. Cosmetics &amp; Personal Care"
+                            className="w-full px-3 py-2 text-xs bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-700 rounded-lg text-slate-900 dark:text-white"
+                          />
+                        </div>
                       </div>
-                    </div>
+                    )}
                   </div>
 
                   {/* 4. IMAGE MANAGEMENT & GALLERY (Upload, Replace, Reorder, Delete) */}

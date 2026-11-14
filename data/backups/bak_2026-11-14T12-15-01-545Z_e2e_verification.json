@@ -1,0 +1,808 @@
+{
+  "backupId": "bak_2026-11-14T12-15-01-545Z_e2e_verification",
+  "reason": "e2e_verification",
+  "createdAt": "2026-11-14T12:15:01.548Z",
+  "counts": {
+    "categories": 13,
+    "cities": 15,
+    "city_areas": 34,
+    "products": 3,
+    "customers": 1,
+    "app_collections": 25,
+    "admin_audit_logs": 1
+  },
+  "snapshot": {
+    "categories": [
+      {
+        "id": "cat_cosmetics",
+        "name": "Cosmetics & Personal Care",
+        "urdu_name": "کاسمیٹکس و پرسنل کیئر",
+        "parent_category_id": null,
+        "level": 1,
+        "description": null,
+        "is_upcoming": 0,
+        "is_active": 1,
+        "display_order": 1,
+        "created_at": "2026-11-14T12:14:31.998Z",
+        "updated_at": "2026-11-14T12:14:31.998Z"
+      },
+      {
+        "id": "cat_cosmetics_hair",
+        "name": "Hair Care & Styling",
+        "urdu_name": "ہیئر کیئر و اسٹائلنگ",
+        "parent_category_id": "cat_cosmetics",
+        "level": 2,
+        "description": null,
+        "is_upcoming": 0,
+        "is_active": 1,
+        "display_order": 11,
+        "created_at": "2026-11-14T12:14:31.998Z",
+        "updated_at": "2026-11-14T12:14:31.998Z"
+      },
+      {
+        "id": "cat_electronics",
+        "name": "Electronics & Gadgets",
+        "urdu_name": "الیکٹرانکس و گیجٹس",
+        "parent_category_id": null,
+        "level": 1,
+        "description": null,
+        "is_upcoming": 0,
+        "is_active": 1,
+        "display_order": 2,
+        "created_at": "2026-11-14T12:14:31.998Z",
+        "updated_at": "2026-11-14T12:14:31.998Z"
+      },
+      {
+        "id": "cat_electronics_watches",
+        "name": "Smartwatches & Wearables",
+        "urdu_name": "اسمارٹ واچز",
+        "parent_category_id": "cat_electronics",
+        "level": 2,
+        "description": null,
+        "is_upcoming": 0,
+        "is_active": 1,
+        "display_order": 21,
+        "created_at": "2026-11-14T12:14:31.998Z",
+        "updated_at": "2026-11-14T12:14:31.998Z"
+      },
+      {
+        "id": "cat_fashion",
+        "name": "Fashion & Apparel",
+        "urdu_name": "فیشن و ملبوسات",
+        "parent_category_id": null,
+        "level": 1,
+        "description": null,
+        "is_upcoming": 0,
+        "is_active": 1,
+        "display_order": 3,
+        "created_at": "2026-11-14T12:14:31.998Z",
+        "updated_at": "2026-11-14T12:14:31.998Z"
+      },
+      {
+        "id": "cat_fashion_men",
+        "name": "Men's Fashion",
+        "urdu_name": "مردانہ ملبوسات",
+        "parent_category_id": "cat_fashion",
+        "level": 2,
+        "description": null,
+        "is_upcoming": 0,
+        "is_active": 1,
+        "display_order": 31,
+        "created_at": "2026-11-14T12:14:31.998Z",
+        "updated_at": "2026-11-14T12:14:31.998Z"
+      },
+      {
+        "id": "cat_fashion_men_kameez",
+        "name": "Shalwar Kameez",
+        "urdu_name": "شلوار قمیض",
+        "parent_category_id": "cat_fashion_men",
+        "level": 3,
+        "description": null,
+        "is_upcoming": 0,
+        "is_active": 1,
+        "display_order": 311,
+        "created_at": "2026-11-14T12:14:31.998Z",
+        "updated_at": "2026-11-14T12:14:31.998Z"
+      },
+      {
+        "id": "cat_fashion_men_shirts",
+        "name": "Shirts & Trousers",
+        "urdu_name": "شرٹس و ٹراؤزرز",
+        "parent_category_id": "cat_fashion_men",
+        "level": 3,
+        "description": null,
+        "is_upcoming": 0,
+        "is_active": 1,
+        "display_order": 312,
+        "created_at": "2026-11-14T12:14:31.998Z",
+        "updated_at": "2026-11-14T12:14:31.998Z"
+      },
+      {
+        "id": "cat_fashion_women",
+        "name": "Women's Fashion",
+        "urdu_name": "خواتین ملبوسات",
+        "parent_category_id": "cat_fashion",
+        "level": 2,
+        "description": null,
+        "is_upcoming": 0,
+        "is_active": 1,
+        "display_order": 32,
+        "created_at": "2026-11-14T12:14:31.998Z",
+        "updated_at": "2026-11-14T12:14:31.998Z"
+      },
+      {
+        "id": "cat_kitchen",
+        "name": "Kitchen & Home",
+        "urdu_name": "کچن و گھریلو سامان",
+        "parent_category_id": null,
+        "level": 1,
+        "description": null,
+        "is_upcoming": 0,
+        "is_active": 1,
+        "display_order": 4,
+        "created_at": "2026-11-14T12:14:31.998Z",
+        "updated_at": "2026-11-14T12:14:31.998Z"
+      },
+      {
+        "id": "cat_decorative",
+        "name": "Decorative Items",
+        "urdu_name": "ڈیکوریشن و تحائف",
+        "parent_category_id": null,
+        "level": 1,
+        "description": null,
+        "is_upcoming": 0,
+        "is_active": 1,
+        "display_order": 5,
+        "created_at": "2026-11-14T12:14:31.998Z",
+        "updated_at": "2026-11-14T12:14:31.998Z"
+      },
+      {
+        "id": "cat_accessories",
+        "name": "Accessories",
+        "urdu_name": "متفرق اسیسریز",
+        "parent_category_id": null,
+        "level": 1,
+        "description": null,
+        "is_upcoming": 0,
+        "is_active": 1,
+        "display_order": 6,
+        "created_at": "2026-11-14T12:14:31.998Z",
+        "updated_at": "2026-11-14T12:14:31.998Z"
+      },
+      {
+        "id": "cat_upcoming",
+        "name": "Upcoming Viral Products | Coming Soon",
+        "urdu_name": "جلد دستیاب (وائرل آئٹمز)",
+        "parent_category_id": null,
+        "level": 1,
+        "description": "Informational showcase of trending viral wholesale lots expected soon (Not yet purchasable)",
+        "is_upcoming": 1,
+        "is_active": 1,
+        "display_order": 7,
+        "created_at": "2026-11-14T12:14:31.998Z",
+        "updated_at": "2026-11-14T12:14:32.007Z"
+      }
+    ],
+    "cities": [
+      {
+        "id": "city_muzaffarabad",
+        "name": "Muzaffarabad",
+        "allowed": 1,
+        "display_order": 1,
+        "created_at": "2026-11-14T12:14:31.998Z",
+        "updated_at": "2026-11-14T12:14:31.998Z"
+      },
+      {
+        "id": "city_mirpur",
+        "name": "Mirpur (AJK)",
+        "allowed": 1,
+        "display_order": 2,
+        "created_at": "2026-11-14T12:14:31.998Z",
+        "updated_at": "2026-11-14T12:14:31.998Z"
+      },
+      {
+        "id": "city_rawalpindi",
+        "name": "Rawalpindi",
+        "allowed": 1,
+        "display_order": 3,
+        "created_at": "2026-11-14T12:14:31.998Z",
+        "updated_at": "2026-11-14T12:14:31.998Z"
+      },
+      {
+        "id": "city_islamabad",
+        "name": "Islamabad",
+        "allowed": 1,
+        "display_order": 4,
+        "created_at": "2026-11-14T12:14:31.998Z",
+        "updated_at": "2026-11-14T12:14:31.998Z"
+      },
+      {
+        "id": "city_lahore",
+        "name": "Lahore",
+        "allowed": 1,
+        "display_order": 5,
+        "created_at": "2026-11-14T12:14:31.998Z",
+        "updated_at": "2026-11-14T12:14:31.998Z"
+      },
+      {
+        "id": "city_karachi",
+        "name": "Karachi",
+        "allowed": 1,
+        "display_order": 6,
+        "created_at": "2026-11-14T12:14:31.998Z",
+        "updated_at": "2026-11-14T12:14:31.998Z"
+      },
+      {
+        "id": "city_faisalabad",
+        "name": "Faisalabad",
+        "allowed": 1,
+        "display_order": 7,
+        "created_at": "2026-11-14T12:14:31.998Z",
+        "updated_at": "2026-11-14T12:14:31.998Z"
+      },
+      {
+        "id": "city_multan",
+        "name": "Multan",
+        "allowed": 1,
+        "display_order": 8,
+        "created_at": "2026-11-14T12:14:31.998Z",
+        "updated_at": "2026-11-14T12:14:31.998Z"
+      },
+      {
+        "id": "city_gujranwala",
+        "name": "Gujranwala",
+        "allowed": 1,
+        "display_order": 9,
+        "created_at": "2026-11-14T12:14:31.998Z",
+        "updated_at": "2026-11-14T12:14:31.998Z"
+      },
+      {
+        "id": "city_sialkot",
+        "name": "Sialkot",
+        "allowed": 1,
+        "display_order": 10,
+        "created_at": "2026-11-14T12:14:31.998Z",
+        "updated_at": "2026-11-14T12:14:31.998Z"
+      },
+      {
+        "id": "city_peshawar",
+        "name": "Peshawar",
+        "allowed": 1,
+        "display_order": 11,
+        "created_at": "2026-11-14T12:14:31.998Z",
+        "updated_at": "2026-11-14T12:14:31.998Z"
+      },
+      {
+        "id": "city_abbottabad",
+        "name": "Abbottabad",
+        "allowed": 1,
+        "display_order": 12,
+        "created_at": "2026-11-14T12:14:31.998Z",
+        "updated_at": "2026-11-14T12:14:31.998Z"
+      },
+      {
+        "id": "city_quetta",
+        "name": "Quetta",
+        "allowed": 1,
+        "display_order": 13,
+        "created_at": "2026-11-14T12:14:31.998Z",
+        "updated_at": "2026-11-14T12:14:31.998Z"
+      },
+      {
+        "id": "city_bahawalpur",
+        "name": "Bahawalpur",
+        "allowed": 1,
+        "display_order": 14,
+        "created_at": "2026-11-14T12:14:31.998Z",
+        "updated_at": "2026-11-14T12:14:31.998Z"
+      },
+      {
+        "id": "city_sargodha",
+        "name": "Sargodha",
+        "allowed": 1,
+        "display_order": 15,
+        "created_at": "2026-11-14T12:14:31.998Z",
+        "updated_at": "2026-11-14T12:14:31.998Z"
+      }
+    ],
+    "city_areas": [
+      {
+        "id": "area_mzd_madina",
+        "city_id": "city_muzaffarabad",
+        "name": "Madina Market",
+        "allowed": 1,
+        "created_at": "2026-11-14T12:14:31.998Z",
+        "updated_at": "2026-11-14T12:14:31.998Z"
+      },
+      {
+        "id": "area_mzd_chattar",
+        "city_id": "city_muzaffarabad",
+        "name": "Chattar",
+        "allowed": 1,
+        "created_at": "2026-11-14T12:14:31.998Z",
+        "updated_at": "2026-11-14T12:14:31.998Z"
+      },
+      {
+        "id": "area_mzd_chehla",
+        "city_id": "city_muzaffarabad",
+        "name": "Chehla Bandi",
+        "allowed": 1,
+        "created_at": "2026-11-14T12:14:31.998Z",
+        "updated_at": "2026-11-14T12:14:31.998Z"
+      },
+      {
+        "id": "area_mzd_upper_adda",
+        "city_id": "city_muzaffarabad",
+        "name": "Upper Adda",
+        "allowed": 1,
+        "created_at": "2026-11-14T12:14:31.998Z",
+        "updated_at": "2026-11-14T12:14:31.998Z"
+      },
+      {
+        "id": "area_mzd_lower_plate",
+        "city_id": "city_muzaffarabad",
+        "name": "Lower Plate",
+        "allowed": 1,
+        "created_at": "2026-11-14T12:14:31.998Z",
+        "updated_at": "2026-11-14T12:14:31.998Z"
+      },
+      {
+        "id": "area_mzd_gojra",
+        "city_id": "city_muzaffarabad",
+        "name": "Gojra",
+        "allowed": 1,
+        "created_at": "2026-11-14T12:14:31.998Z",
+        "updated_at": "2026-11-14T12:14:31.998Z"
+      },
+      {
+        "id": "area_mzd_tariqabad",
+        "city_id": "city_muzaffarabad",
+        "name": "Tariqabad",
+        "allowed": 1,
+        "created_at": "2026-11-14T12:14:31.998Z",
+        "updated_at": "2026-11-14T12:14:31.998Z"
+      },
+      {
+        "id": "area_mrp_f1",
+        "city_id": "city_mirpur",
+        "name": "Sector F-1",
+        "allowed": 1,
+        "created_at": "2026-11-14T12:14:31.998Z",
+        "updated_at": "2026-11-14T12:14:31.998Z"
+      },
+      {
+        "id": "area_mrp_allama",
+        "city_id": "city_mirpur",
+        "name": "Allama Iqbal Road",
+        "allowed": 1,
+        "created_at": "2026-11-14T12:14:31.998Z",
+        "updated_at": "2026-11-14T12:14:31.998Z"
+      },
+      {
+        "id": "area_mrp_chaksawari",
+        "city_id": "city_mirpur",
+        "name": "Chaksawari",
+        "allowed": 1,
+        "created_at": "2026-11-14T12:14:31.998Z",
+        "updated_at": "2026-11-14T12:14:31.998Z"
+      },
+      {
+        "id": "area_rwp_raja",
+        "city_id": "city_rawalpindi",
+        "name": "Raja Bazaar",
+        "allowed": 1,
+        "created_at": "2026-11-14T12:14:31.998Z",
+        "updated_at": "2026-11-14T12:14:31.998Z"
+      },
+      {
+        "id": "area_rwp_saddar",
+        "city_id": "city_rawalpindi",
+        "name": "Saddar",
+        "allowed": 1,
+        "created_at": "2026-11-14T12:14:31.998Z",
+        "updated_at": "2026-11-14T12:14:31.998Z"
+      },
+      {
+        "id": "area_rwp_bahria",
+        "city_id": "city_rawalpindi",
+        "name": "Bahria Town",
+        "allowed": 1,
+        "created_at": "2026-11-14T12:14:31.998Z",
+        "updated_at": "2026-11-14T12:14:31.998Z"
+      },
+      {
+        "id": "area_rwp_chaklala",
+        "city_id": "city_rawalpindi",
+        "name": "Chaklala Scheme III",
+        "allowed": 1,
+        "created_at": "2026-11-14T12:14:31.998Z",
+        "updated_at": "2026-11-14T12:14:31.998Z"
+      },
+      {
+        "id": "area_isb_f10",
+        "city_id": "city_islamabad",
+        "name": "Sector F-10 Markaz",
+        "allowed": 1,
+        "created_at": "2026-11-14T12:14:31.998Z",
+        "updated_at": "2026-11-14T12:14:31.998Z"
+      },
+      {
+        "id": "area_isb_g11",
+        "city_id": "city_islamabad",
+        "name": "Sector G-11",
+        "allowed": 1,
+        "created_at": "2026-11-14T12:14:31.998Z",
+        "updated_at": "2026-11-14T12:14:31.998Z"
+      },
+      {
+        "id": "area_isb_bluearea",
+        "city_id": "city_islamabad",
+        "name": "Blue Area",
+        "allowed": 1,
+        "created_at": "2026-11-14T12:14:31.998Z",
+        "updated_at": "2026-11-14T12:14:31.998Z"
+      },
+      {
+        "id": "area_lhr_shahalam",
+        "city_id": "city_lahore",
+        "name": "Shah Alam Market",
+        "allowed": 1,
+        "created_at": "2026-11-14T12:14:31.998Z",
+        "updated_at": "2026-11-14T12:14:31.998Z"
+      },
+      {
+        "id": "area_lhr_anarkali",
+        "city_id": "city_lahore",
+        "name": "Anarkali Bazaar",
+        "allowed": 1,
+        "created_at": "2026-11-14T12:14:31.998Z",
+        "updated_at": "2026-11-14T12:14:31.998Z"
+      },
+      {
+        "id": "area_lhr_hallroad",
+        "city_id": "city_lahore",
+        "name": "Hall Road",
+        "allowed": 1,
+        "created_at": "2026-11-14T12:14:31.998Z",
+        "updated_at": "2026-11-14T12:14:31.998Z"
+      },
+      {
+        "id": "area_lhr_gulberg",
+        "city_id": "city_lahore",
+        "name": "Gulberg III",
+        "allowed": 1,
+        "created_at": "2026-11-14T12:14:31.998Z",
+        "updated_at": "2026-11-14T12:14:31.998Z"
+      },
+      {
+        "id": "area_lhr_johar",
+        "city_id": "city_lahore",
+        "name": "Johar Town",
+        "allowed": 1,
+        "created_at": "2026-11-14T12:14:31.998Z",
+        "updated_at": "2026-11-14T12:14:31.998Z"
+      },
+      {
+        "id": "area_khi_bolton",
+        "city_id": "city_karachi",
+        "name": "Bolton Market",
+        "allowed": 1,
+        "created_at": "2026-11-14T12:14:31.998Z",
+        "updated_at": "2026-11-14T12:14:31.998Z"
+      },
+      {
+        "id": "area_khi_saddar",
+        "city_id": "city_karachi",
+        "name": "Saddar",
+        "allowed": 1,
+        "created_at": "2026-11-14T12:14:31.998Z",
+        "updated_at": "2026-11-14T12:14:31.998Z"
+      },
+      {
+        "id": "area_khi_gulshan",
+        "city_id": "city_karachi",
+        "name": "Gulshan-e-Iqbal",
+        "allowed": 1,
+        "created_at": "2026-11-14T12:14:31.998Z",
+        "updated_at": "2026-11-14T12:14:31.998Z"
+      },
+      {
+        "id": "area_fsd_katchery",
+        "city_id": "city_faisalabad",
+        "name": "Katchery Bazaar",
+        "allowed": 1,
+        "created_at": "2026-11-14T12:14:31.998Z",
+        "updated_at": "2026-11-14T12:14:31.998Z"
+      },
+      {
+        "id": "area_mux_hussain",
+        "city_id": "city_multan",
+        "name": "Hussain Agahi",
+        "allowed": 1,
+        "created_at": "2026-11-14T12:14:31.998Z",
+        "updated_at": "2026-11-14T12:14:31.998Z"
+      },
+      {
+        "id": "area_guj_rail",
+        "city_id": "city_gujranwala",
+        "name": "Rail Bazaar",
+        "allowed": 1,
+        "created_at": "2026-11-14T12:14:31.998Z",
+        "updated_at": "2026-11-14T12:14:31.998Z"
+      },
+      {
+        "id": "area_skt_paris",
+        "city_id": "city_sialkot",
+        "name": "Paris Road",
+        "allowed": 1,
+        "created_at": "2026-11-14T12:14:31.998Z",
+        "updated_at": "2026-11-14T12:14:31.998Z"
+      },
+      {
+        "id": "area_pew_qissa",
+        "city_id": "city_peshawar",
+        "name": "Qissa Khwani",
+        "allowed": 1,
+        "created_at": "2026-11-14T12:14:31.998Z",
+        "updated_at": "2026-11-14T12:14:31.998Z"
+      },
+      {
+        "id": "area_abt_mandian",
+        "city_id": "city_abbottabad",
+        "name": "Mandian",
+        "allowed": 1,
+        "created_at": "2026-11-14T12:14:31.998Z",
+        "updated_at": "2026-11-14T12:14:31.998Z"
+      },
+      {
+        "id": "area_uet_jinnah",
+        "city_id": "city_quetta",
+        "name": "Jinnah Road",
+        "allowed": 1,
+        "created_at": "2026-11-14T12:14:31.998Z",
+        "updated_at": "2026-11-14T12:14:31.998Z"
+      },
+      {
+        "id": "area_bhv_farid",
+        "city_id": "city_bahawalpur",
+        "name": "Farid Gate",
+        "allowed": 1,
+        "created_at": "2026-11-14T12:14:31.998Z",
+        "updated_at": "2026-11-14T12:14:31.998Z"
+      },
+      {
+        "id": "area_sgd_urdu",
+        "city_id": "city_sargodha",
+        "name": "Urdu Bazaar",
+        "allowed": 1,
+        "created_at": "2026-11-14T12:14:31.998Z",
+        "updated_at": "2026-11-14T12:14:31.998Z"
+      }
+    ],
+    "products": [
+      {
+        "id": "prod_1",
+        "name": "5-in-1 Hot Air Styler & Hair Dryer Brush",
+        "urdu_name": "فائیو ان ون ہاٹ ایئر ہیئر اسٹائلر ملٹی فنکشن",
+        "category": "Cosmetics & Personal Care",
+        "parent_category_id": "cat_cosmetics",
+        "subcategory_id": null,
+        "child_subcategory_id": null,
+        "sku": "ELEC-HAIR-001",
+        "cost_price": 2250,
+        "market_price": 6980,
+        "our_price": 3490,
+        "stock_qty": 80,
+        "min_stock_alert": 10,
+        "is_upcoming": 0,
+        "upcoming_status": "available",
+        "expected_arrival_date": null,
+        "status": "published",
+        "created_at": "2026-03-01",
+        "updated_at": "2026-11-14T12:14:32.004Z",
+        "data_json": "{\"id\":\"prod_1\",\"name\":\"5-in-1 Hot Air Styler & Hair Dryer Brush\",\"urduName\":\"فائیو ان ون ہاٹ ایئر ہیئر اسٹائلر ملٹی فنکشن\",\"category\":\"Cosmetics & Personal Care\",\"parentCategoryId\":\"cat_cosmetics\",\"sku\":\"ELEC-HAIR-001\",\"costPrice\":2250,\"marketPrice\":6980,\"ourPrice\":3490,\"stockQty\":80,\"minStockAlert\":10,\"salesCount\":25,\"totalRevenue\":87250,\"totalProfit\":31000,\"isWinningItem\":true,\"badgeText\":\"-50%\",\"rating\":4.9,\"imageUrl\":\"https://images.unsplash.com/photo-1522337360788-8b13dee7a37e?w=800&auto=format&fit=crop&q=80\",\"pictures\":[\"https://images.unsplash.com/photo-1522337360788-8b13dee7a37e?w=800&auto=format&fit=crop&q=80\",\"https://images.unsplash.com/photo-1560066984-138dadb4c035?w=800&auto=format&fit=crop&q=80\",\"https://images.unsplash.com/photo-1527799820374-dcf8d9d4a388?w=800&auto=format&fit=crop&q=80\"],\"sizes\":[\"Standard 5-Head Salon Kit\",\"Compact Travel Case Edition\"],\"selectedSize\":\"Standard 5-Head Salon Kit\",\"brand\":\"100DAGAR Pro Series\",\"tags\":[\"hair styler\",\"dryer brush\",\"curler\",\"salon kit\",\"wholesale\"],\"status\":\"published\",\"shortDescription\":\"One-step hair drying, volumizing and curling salon kit with 5 interchangeable negative-ion ceramic heads.\",\"variations\":[{\"id\":\"var_prod1_1\",\"sku\":\"ELEC-HAIR-001-GOLD-STD\",\"attributes\":{\"Color\":\"Rose Gold & Grey\",\"Edition\":\"Standard 5-Head Salon Kit\"},\"size\":\"Standard 5-Head Salon Kit\",\"color\":\"Rose Gold & Grey\",\"originalPrice\":6980,\"salePrice\":3490,\"stockQty\":50,\"image\":\"https://images.unsplash.com/photo-1522337360788-8b13dee7a37e?w=800&auto=format&fit=crop&q=80\"},{\"id\":\"var_prod1_2\",\"sku\":\"ELEC-HAIR-001-BLK-TRV\",\"attributes\":{\"Color\":\"Matte Black\",\"Edition\":\"Compact Travel Case Edition\"},\"size\":\"Compact Travel Case Edition\",\"color\":\"Matte Black\",\"originalPrice\":7490,\"salePrice\":3790,\"stockQty\":30,\"image\":\"https://images.unsplash.com/photo-1560066984-138dadb4c035?w=800&auto=format&fit=crop&q=80\"}],\"specifications\":{\"Brand / Series\":\"100DAGAR Salon Series Pro 5-in-1\",\"Power Consumption\":\"1000W High Speed Ceramic Airflow Motor\",\"Voltage\":\"220V - 240V, 50/60Hz (Pak Standard)\",\"Attachments Included\":\"Airwrap Barrel (Left & Right), Smoothing Dryer, Round Volumizing Brush, Pre-styling Nozzle\",\"Heat / Speed Levels\":\"3 Temperature Settings + Cool Shot Lock\",\"Cord Length\":\"1.8 Meter 360° Anti-Tangle Swivel Wire\",\"Material\":\"Heat-Resistant ABS Shell + Negative Ion Tourmaline Ceramic\",\"Warranty\":\"6 Months Local Replacement Warranty\",\"Origin\":\"Grade-A Wholesale Lot Import (Guaranteed Salon Quality)\"},\"features\":[\"One-Step Hair Drying, Volumizing & Curling without Extreme Heat Damage\",\"Negative Ion Technology seals hair cuticles for instant frizz-free salon shine\",\"Includes 5 interchangeable brush attachments for straight, wavy, or bouncy curls\",\"Ergonomic lightweight grip designed for both personal grooming and wholesale salons\"],\"details\":\"The 100DAGAR 5-in-1 Hot Air Styler & Hair Dryer Brush is a complete hair styling salon in a single box. Engineered with aerodynamic Coanda-effect airflow, it shapes and curls hair automatically while drying. Retail market price is Rs. 6,980 across major stores; our direct wholesale lot rate is Rs. 3,490, giving customers an instant 50% cash saving.\",\"websiteUrl\":\"https://100dagar.pk/products/5-in-1-hot-air-styler\",\"description\":\"High-demand salon grade multi-head hair styling tool. High turnover wholesale lot with 50% instant savings.\",\"investorId\":\"inv_1\",\"investorWhatsApp\":\"03001234567\",\"createdAt\":\"2026-03-01\",\"isUpcoming\":false,\"upcomingStatus\":\"available\",\"updatedAt\":\"2026-11-14T12:14:32.004Z\"}"
+      },
+      {
+        "id": "prod_2",
+        "name": "Smart Ultra AMOLED GPS Smartwatch (Series 10)",
+        "urdu_name": "اسمارٹ الٹرا اے ایم او ایل ای ڈی واچ (جلد دستیاب)",
+        "category": "Upcoming Viral Products | Coming Soon",
+        "parent_category_id": "cat_upcoming",
+        "subcategory_id": null,
+        "child_subcategory_id": null,
+        "sku": "WATCH-ULTRA-S10",
+        "cost_price": 4200,
+        "market_price": 12500,
+        "our_price": 5990,
+        "stock_qty": 0,
+        "min_stock_alert": 5,
+        "is_upcoming": 1,
+        "upcoming_status": "coming_soon",
+        "expected_arrival_date": "2026-12-01",
+        "status": "published",
+        "created_at": "2026-03-02",
+        "updated_at": "2026-11-14T12:14:32.008Z",
+        "data_json": "{\"id\":\"prod_2\",\"name\":\"Smart Ultra AMOLED GPS Smartwatch (Series 10)\",\"urduName\":\"اسمارٹ الٹرا اے ایم او ایل ای ڈی واچ (جلد دستیاب)\",\"category\":\"Upcoming Viral Products | Coming Soon\",\"parentCategoryId\":\"cat_upcoming\",\"isUpcoming\":true,\"upcomingStatus\":\"coming_soon\",\"expectedArrivalDate\":\"2026-12-01\",\"sku\":\"WATCH-ULTRA-S10\",\"costPrice\":4200,\"marketPrice\":12500,\"ourPrice\":5990,\"stockQty\":0,\"minStockAlert\":5,\"salesCount\":0,\"totalRevenue\":0,\"totalProfit\":0,\"isWinningItem\":true,\"badgeText\":\"COMING SOON\",\"rating\":5,\"imageUrl\":\"https://images.unsplash.com/photo-1579586337278-3befd40fd17a?w=800&auto=format&fit=crop&q=80\",\"pictures\":[\"https://images.unsplash.com/photo-1579586337278-3befd40fd17a?w=800&auto=format&fit=crop&q=80\",\"https://images.unsplash.com/photo-1508685096489-7aacd43bd3b1?w=800&auto=format&fit=crop&q=80\"],\"sizes\":[\"Titanium Orange Strap (49mm)\",\"Ocean Black Strap (49mm)\"],\"selectedSize\":\"Titanium Orange Strap (49mm)\",\"specifications\":{\"Display\":\"2.02 Inch HD AMOLED Display (60Hz)\",\"Connectivity\":\"Bluetooth 5.3 Calling + GPS Location Tracking\",\"Battery Life\":\"Up to 5 Days Typical Use (Wireless Qi Fast Charger Included)\",\"Water Resistance\":\"IP68 Deep Waterproof Rating\",\"Sensors\":\"Real-time Heart Rate, SpO2, Blood Pressure, Sleep Monitor\",\"Status\":\"Under Shipment / Arriving Soon in Madina Market\"},\"features\":[\"Viral TikTok Trending Smartwatch with Crisp High Refresh AMOLED Screen\",\"Dual-speaker clear audio for direct Bluetooth calling on Jazz, Zong, Telenor\",\"Wireless magnetic fast charging with robust aerospace titanium alloy case\",\"Informational showcase: Pre-bookings open via direct WhatsApp enquiry\"],\"details\":\"Viral upcoming item currently under wholesale transit. Purchasing is locked while in transit. Customers can register interest and enquire directly on WhatsApp for early lot reservations.\",\"websiteUrl\":\"https://100dagar.pk/products/smart-ultra-amoled-watch\",\"description\":\"Viral high-tech smartwatch arriving next week. Pre-orders opening soon.\",\"createdAt\":\"2026-03-02\",\"status\":\"published\",\"updatedAt\":\"2026-11-14T12:14:32.008Z\"}"
+      },
+      {
+        "id": "test_upcoming_1794658501156",
+        "name": "Verification Temp Upcoming Gadget",
+        "urdu_name": null,
+        "category": "Cosmetics & Personal Care > Hair Care & Styling",
+        "parent_category_id": "cat_cosmetics",
+        "subcategory_id": "cat_cosmetics_hair",
+        "child_subcategory_id": null,
+        "sku": null,
+        "cost_price": 500,
+        "market_price": 1200,
+        "our_price": 950,
+        "stock_qty": 15,
+        "min_stock_alert": 5,
+        "is_upcoming": 0,
+        "upcoming_status": "available",
+        "expected_arrival_date": "2024-01-10",
+        "status": "published",
+        "created_at": "2026-11-14",
+        "updated_at": "2026-11-14T12:15:01.512Z",
+        "data_json": "{\"id\":\"test_upcoming_1794658501156\",\"name\":\"Verification Temp Upcoming Gadget\",\"category\":\"Cosmetics & Personal Care > Hair Care & Styling\",\"parentCategoryId\":\"cat_cosmetics\",\"isUpcoming\":false,\"upcomingStatus\":\"available\",\"expectedArrivalDate\":\"2024-01-10\",\"costPrice\":500,\"marketPrice\":1200,\"ourPrice\":950,\"stockQty\":15,\"status\":\"published\",\"updatedAt\":\"2026-11-14T12:15:01.512Z\",\"subcategoryId\":\"cat_cosmetics_hair\",\"minStockAlert\":5,\"activatedAt\":\"2026-11-14T12:15:01.512Z\",\"activatedBy\":\"Shahzad Malik\"}"
+      }
+    ],
+    "customers": [
+      {
+        "id": "cust_1",
+        "name": "Al-Madina Cosmetics & General Store",
+        "phone": "03001234567",
+        "city": "Lahore",
+        "area": "Anarkali Bazaar",
+        "mohalla": null,
+        "landmark": null,
+        "address": null,
+        "balance": 17450,
+        "status": "active",
+        "created_at": "2026-02-15",
+        "updated_at": "2026-11-14T12:14:32.005Z",
+        "data_json": "{\"id\":\"cust_1\",\"name\":\"Al-Madina Cosmetics & General Store\",\"urduName\":\"المدینہ کاسمیٹکس اینڈ جنرل اسٹور\",\"customerType\":\"retail\",\"phone\":\"03001234567\",\"email\":\"madinastore@gmail.com\",\"city\":\"Lahore\",\"area\":\"Anarkali Bazaar\",\"gender\":\"male\",\"ageGroup\":\"26-35\",\"creditLimit\":5000,\"paymentTermsDays\":7,\"pin\":\"234567\",\"notes\":\"Regular wholesale buyer in Madina Market.\",\"createdAt\":\"2026-02-15\",\"balance\":17450,\"status\":\"active\",\"lastReminderSentAt\":\"2026-03-01\",\"totalPurchases\":34900,\"ordersCount\":2,\"lastPurchaseAmount\":34900,\"lastPaidAmount\":17450,\"lastPurchaseDate\":\"2026-03-01\"}"
+      }
+    ],
+    "app_collections": [
+      {
+        "collection_key": "transactions",
+        "data_json": "[{\"id\":\"tx_1\",\"customerId\":\"cust_1\",\"type\":\"credit\",\"amount\":34900,\"paidAmount\":17450,\"dueBalance\":17450,\"saleType\":\"partial\",\"date\":\"2026-03-01\",\"dueDate\":\"2026-03-08\",\"paymentTermsDays\":7,\"softReminderDate\":\"2026-03-05\",\"maxGraceDate\":\"2026-03-15\",\"invoiceNumber\":\"INV-100D-001\",\"notes\":\"Sale: 5-in-1 Hot Air Styler (10x)\",\"items\":[{\"productId\":\"prod_1\",\"description\":\"5-in-1 Hot Air Styler & Hair Dryer Brush\",\"quantity\":10,\"unitPrice\":3490,\"marketPrice\":6980,\"amount\":34900,\"customerSavings\":34900}],\"totalSavings\":34900,\"status\":\"partially_paid\",\"paymentMode\":\"easypaisa\",\"responsibleStaff\":\"Super Admin\",\"auditTrail\":[{\"id\":\"audit_tx_1_created\",\"timestamp\":\"2026-03-01T10:30:00Z\",\"action\":\"created\",\"newStatus\":\"partially_paid\",\"newAmount\":34900,\"changedBy\":\"Super Admin\",\"notes\":\"Initial sale recorded with 50% advance via EasyPaisa\"}],\"createdAt\":\"2026-03-01T10:30:00Z\"}]",
+        "updated_at": "2026-11-14T12:14:31.998Z"
+      },
+      {
+        "collection_key": "cod_orders",
+        "data_json": "[{\"id\":\"cod_1\",\"orderNumber\":\"COD-100D-501\",\"customerId\":\"cust_1\",\"customerName\":\"Al-Madina Cosmetics & General Store\",\"phone\":\"03001234567\",\"city\":\"Lahore\",\"address\":\"Shop # 12, Anarkali Market, Lahore\",\"items\":[{\"productId\":\"prod_1\",\"description\":\"5-in-1 Hot Air Styler & Hair Dryer Brush\",\"quantity\":1,\"unitPrice\":3490,\"marketPrice\":6980,\"amount\":3490,\"customerSavings\":3490}],\"subtotal\":3490,\"deliveryFee\":250,\"totalAmount\":3740,\"courierPartner\":\"WASAL delivery\",\"trackingNumber\":\"WSL-998822\",\"status\":\"dispatched\",\"resellerCode\":\"RES-100D-01\",\"commissionAmount\":90,\"notes\":\"Urgent delivery requested via WASAL delivery\",\"createdAt\":\"2026-03-02T10:00:00Z\",\"dispatchedAt\":\"2026-03-02T14:30:00Z\"},{\"id\":\"cod_2\",\"orderNumber\":\"COD-100D-502\",\"customerName\":\"Haji Aslam (Retailer)\",\"phone\":\"03217654321\",\"city\":\"Gujranwala\",\"address\":\"Rail Bazaar, Near Clock Tower, Gujranwala\",\"items\":[{\"productId\":\"prod_1\",\"description\":\"5-in-1 Hot Air Styler & Hair Dryer Brush\",\"quantity\":2,\"unitPrice\":3490,\"marketPrice\":6980,\"amount\":6980,\"customerSavings\":6980}],\"subtotal\":6980,\"deliveryFee\":300,\"totalAmount\":7280,\"courierPartner\":\"WASAL delivery\",\"trackingNumber\":\"WSL-12345678\",\"status\":\"pending\",\"resellerCode\":\"RES-100D-01\",\"commissionAmount\":180,\"notes\":\"Call before dispatching parcel\",\"createdAt\":\"2026-03-03T09:15:00Z\"}]",
+        "updated_at": "2026-11-14T12:14:31.998Z"
+      },
+      {
+        "collection_key": "wasal_settlements",
+        "data_json": "[]",
+        "updated_at": "2026-11-14T12:14:31.998Z"
+      },
+      {
+        "collection_key": "investors",
+        "data_json": "[{\"id\":\"inv_1\",\"name\":\"Haji Tariq Mehmood\",\"urduName\":\"حاجی طارق محمود (انویسٹر)\",\"phone\":\"03001234567\",\"whatsapp\":\"03001234567\",\"email\":\"tariq.invest@100dagar.pk\",\"address\":\"Plaza # 4, Shah Alam Wholesale Market, Lahore\",\"totalInvestment\":500000,\"profitShareType\":\"percentage\",\"profitShareValue\":35,\"assignedProductIds\":[\"prod_1\"],\"productAllocations\":[{\"productId\":\"prod_1\",\"unitsOwned\":80,\"investedAmount\":500000}],\"isReseller\":false,\"status\":\"active\",\"settledProfit\":10850,\"notes\":\"Funded import lot for 5-in-1 Hot Air Stylers (35% net profit share).\",\"createdAt\":\"2026-02-01\"},{\"id\":\"inv_2\",\"name\":\"Sheikh Farhan Ahmed\",\"urduName\":\"شیخ فرحان احمد (کیپٹل پارٹنر)\",\"phone\":\"03339876543\",\"whatsapp\":\"03339876543\",\"email\":\"farhan.capital@100dagar.pk\",\"address\":\"Suit 12, Hafeez Centre, Gulberg III, Lahore\",\"totalInvestment\":1000000,\"profitShareType\":\"fixed_per_unit\",\"profitShareValue\":200,\"assignedProductIds\":[\"prod_2\"],\"productAllocations\":[{\"productId\":\"prod_2\",\"unitsOwned\":100,\"investedAmount\":1000000}],\"isReseller\":false,\"status\":\"active\",\"settledProfit\":0,\"notes\":\"Seed investor for upcoming AMOLED Smartwatch lot.\",\"createdAt\":\"2026-02-15\"}]",
+        "updated_at": "2026-11-14T12:14:31.998Z"
+      },
+      {
+        "collection_key": "investor_transactions",
+        "data_json": "[{\"id\":\"inv_tx_1\",\"investorId\":\"inv_1\",\"date\":\"2026-02-01\",\"type\":\"investment_deposit\",\"amount\":500000,\"productId\":\"prod_1\",\"productName\":\"5-in-1 Hot Air Styler & Hair Dryer Brush\",\"paymentMode\":\"bank_transfer\",\"notes\":\"Initial capital injection for Lot #100D-HAIR\",\"reference\":\"BANK-MEZN-88321\",\"createdAt\":\"2026-02-01T10:00:00Z\"},{\"id\":\"inv_tx_2\",\"investorId\":\"inv_1\",\"date\":\"2026-03-01\",\"type\":\"profit_payout\",\"amount\":10850,\"productId\":\"prod_1\",\"productName\":\"5-in-1 Hot Air Styler & Hair Dryer Brush\",\"paymentMode\":\"jazzcash\",\"notes\":\"Profit distribution for first 25 units sold (35% of Rs. 31,000 profit = Rs. 10,850)\",\"reference\":\"JCASH-PAY-59402\",\"createdAt\":\"2026-03-01T17:00:00Z\"},{\"id\":\"inv_tx_3\",\"investorId\":\"inv_2\",\"date\":\"2026-02-15\",\"type\":\"investment_deposit\",\"amount\":1000000,\"productId\":\"prod_2\",\"productName\":\"Smart Ultra AMOLED GPS Smartwatch (Series 10)\",\"paymentMode\":\"bank_transfer\",\"notes\":\"Capital deposit for shipment of 200x Smartwatch units\",\"reference\":\"BANK-HBL-99214\",\"createdAt\":\"2026-02-15T12:00:00Z\"}]",
+        "updated_at": "2026-11-14T12:14:31.998Z"
+      },
+      {
+        "collection_key": "resellers",
+        "data_json": "[{\"id\":\"res_1\",\"name\":\"Usman Ghani\",\"urduName\":\"عثمان غنی (ری سیلر)\",\"phone\":\"03125256266\",\"city\":\"Lahore\",\"referralCode\":\"RES-100D-01\",\"paymentChannel\":\"easypaisa\",\"accountTitle\":\"Usman Ghani\",\"accountNumber\":\"03125256266\",\"creditLimit\":25000,\"pin\":\"526266\",\"totalReferredOrders\":5,\"totalSales\":34900,\"totalPaidSales\":20000,\"earnedCommission\":600,\"paidCommission\":300,\"status\":\"active\",\"createdAt\":\"2026-02-10\"},{\"id\":\"res_2\",\"name\":\"Syed Faizan Ali\",\"urduName\":\"سید فیضان علی (آن لائن ری سیلر)\",\"phone\":\"03214567890\",\"city\":\"Karachi\",\"referralCode\":\"RES-100D-02\",\"paymentChannel\":\"jazzcash\",\"accountTitle\":\"Syed Faizan Ali\",\"accountNumber\":\"03214567890\",\"creditLimit\":25000,\"pin\":\"567890\",\"totalReferredOrders\":3,\"totalSales\":17450,\"totalPaidSales\":17450,\"earnedCommission\":510,\"paidCommission\":0,\"status\":\"active\",\"createdAt\":\"2026-02-20\"}]",
+        "updated_at": "2026-11-14T12:14:31.998Z"
+      },
+      {
+        "collection_key": "user_accounts",
+        "data_json": "[{\"id\":\"usr_superadmin\",\"username\":\"admin\",\"fullName\":\"Shahzad Malik\",\"urduName\":\"شہزاد ملک (سپر ایڈمن)\",\"phone\":\"03125256266\",\"email\":\"admin@madinamarket.pk\",\"role\":\"super_admin\",\"status\":\"active\",\"canAuthorizeCreditSale\":true,\"passwordHash\":\"580987\",\"createdAt\":\"2026-01-01\",\"lastLoginAt\":\"2026-03-02T09:15:00Z\",\"loginCount\":142},{\"id\":\"usr_manager_bilal\",\"username\":\"bilal_manager\",\"fullName\":\"Bilal Ahmed\",\"urduName\":\"بلال احمد (سٹور مینیجر)\",\"phone\":\"03215551234\",\"email\":\"bilal@100dagar.pk\",\"role\":\"manager\",\"status\":\"active\",\"canAuthorizeCreditSale\":true,\"passwordHash\":\"551234\",\"suggestedDefaultPin\":\"551234\",\"createdAt\":\"2026-01-15\",\"lastLoginAt\":\"2026-03-02T08:30:00Z\",\"loginCount\":68},{\"id\":\"usr_staff_1\",\"username\":\"hamza_pos\",\"fullName\":\"Hamza Rasheed\",\"urduName\":\"حمزہ رشید (سیلز و کیشیئر)\",\"phone\":\"03456667890\",\"email\":\"hamza@100dagar.pk\",\"role\":\"staff\",\"status\":\"active\",\"canAuthorizeCreditSale\":false,\"passwordHash\":\"667890\",\"suggestedDefaultPin\":\"667890\",\"createdAt\":\"2026-02-01\",\"lastLoginAt\":\"2026-03-01T18:00:00Z\",\"loginCount\":35},{\"id\":\"usr_investor_1\",\"username\":\"tariq_investor\",\"fullName\":\"Haji Tariq Mehmood\",\"urduName\":\"حاجی طارق محمود (انویسٹر)\",\"phone\":\"03001234567\",\"email\":\"tariq.invest@100dagar.pk\",\"role\":\"investor\",\"linkedInvestorId\":\"inv_1\",\"status\":\"active\",\"passwordHash\":\"234567\",\"suggestedDefaultPin\":\"234567\",\"createdAt\":\"2026-02-01\",\"lastLoginAt\":\"2026-03-01T14:20:00Z\",\"loginCount\":12},{\"id\":\"usr_reseller_1\",\"username\":\"usman_reseller\",\"fullName\":\"Usman Ghani\",\"urduName\":\"عثمان غنی (ری سیلر)\",\"phone\":\"03125256266\",\"role\":\"reseller\",\"linkedResellerCode\":\"RES-100D-01\",\"status\":\"active\",\"passwordHash\":\"526266\",\"suggestedDefaultPin\":\"526266\",\"createdAt\":\"2026-02-10\",\"lastLoginAt\":\"2026-03-02T14:45:00Z\",\"loginCount\":29},{\"id\":\"usr_cust_1\",\"username\":\"madina_cosmetics\",\"fullName\":\"Al-Madina Cosmetics & General Store\",\"urduName\":\"المدینہ کاسمیٹکس\",\"phone\":\"03001234567\",\"role\":\"customer\",\"linkedCustomerId\":\"cust_1\",\"status\":\"active\",\"passwordHash\":\"234567\",\"suggestedDefaultPin\":\"234567\",\"createdAt\":\"2026-02-15\",\"lastLoginAt\":\"2026-03-02T11:30:00Z\",\"loginCount\":8},{\"id\":\"usr_manager_1\",\"username\":\"manager_shahalam\",\"fullName\":\"Muhammad Salman\",\"urduName\":\"محمد سلمان (برانچ مینیجر)\",\"phone\":\"03125256266\",\"role\":\"manager\",\"linkedBranchId\":\"branch_1\",\"linkedBranchName\":\"Shah Alam Head Office & Main Wholesale Branch\",\"status\":\"active\",\"canAuthorizeCreditSale\":true,\"passwordHash\":\"526266\",\"suggestedDefaultPin\":\"526266\",\"createdAt\":\"2026-01-01\",\"lastLoginAt\":\"2026-03-05T09:30:00Z\",\"loginCount\":42},{\"id\":\"usr_manager_2\",\"username\":\"manager_hallroad\",\"fullName\":\"Tariq Mehmood\",\"urduName\":\"طارق محمود (ہال روڈ برانچ مینیجر)\",\"phone\":\"03001234567\",\"role\":\"manager\",\"linkedBranchId\":\"branch_2\",\"linkedBranchName\":\"Hall Road Electronics & Gadgets Branch\",\"status\":\"active\",\"canAuthorizeCreditSale\":false,\"passwordHash\":\"234567\",\"suggestedDefaultPin\":\"234567\",\"createdAt\":\"2026-01-15\",\"lastLoginAt\":\"2026-03-04T12:00:00Z\",\"loginCount\":31},{\"id\":\"usr_manager_3\",\"username\":\"manager_rajabazaar\",\"fullName\":\"Khurram Shehzad\",\"urduName\":\"خرم شہزاد (راولپنڈی برانچ مینیجر)\",\"phone\":\"03339876543\",\"role\":\"manager\",\"linkedBranchId\":\"branch_3\",\"linkedBranchName\":\"Raja Bazaar Wholesale & Trading Branch\",\"status\":\"active\",\"canAuthorizeCreditSale\":true,\"passwordHash\":\"876543\",\"suggestedDefaultPin\":\"876543\",\"createdAt\":\"2026-02-01\",\"lastLoginAt\":\"2026-03-03T16:15:00Z\",\"loginCount\":19}]",
+        "updated_at": "2026-11-14T12:14:31.998Z"
+      },
+      {
+        "collection_key": "branches",
+        "data_json": "[{\"id\":\"branch_1\",\"name\":\"Shah Alam Head Office & Main Wholesale Branch\",\"code\":\"BR-LHR-01\",\"address\":\"Shop # 14, Madina Market (مدینہ مارکیٹ), Shah Alam, Lahore\",\"contactNumber\":\"0312 5256 266\",\"assignedManagerId\":\"usr_manager_1\",\"assignedManagerName\":\"Muhammad Salman (Branch Manager)\",\"status\":\"active\",\"createdAt\":\"2026-01-01\",\"specialAuthorities\":{\"canRegisterWalkIn\":true,\"canEnterSales\":true,\"canViewStock\":true,\"canManageStock\":false,\"canRecordPayment\":true,\"canRecordCash\":true,\"canManageOrders\":true,\"canManageCustomers\":true,\"canAssignReferral\":true,\"canTrackReferrals\":true,\"canViewReports\":true,\"canViewHistory\":true,\"canAuthorizeDiscount\":true,\"canAuthorizeCreditSale\":true,\"maxDiscountPercent\":10},\"remarks\":\"Main wholesale warehouse and flagship walk-in retail distribution center.\"},{\"id\":\"branch_2\",\"name\":\"Hall Road Electronics & Gadgets Branch\",\"code\":\"BR-LHR-02\",\"address\":\"Shop # 28, Al-Rehman Center, Hall Road, Lahore\",\"contactNumber\":\"0300 1234567\",\"assignedManagerId\":\"usr_manager_2\",\"assignedManagerName\":\"Tariq Mehmood (Branch Manager)\",\"status\":\"active\",\"createdAt\":\"2026-01-15\",\"specialAuthorities\":{\"canRegisterWalkIn\":true,\"canEnterSales\":true,\"canViewStock\":true,\"canManageStock\":false,\"canRecordPayment\":true,\"canRecordCash\":true,\"canManageOrders\":true,\"canManageCustomers\":true,\"canAssignReferral\":true,\"canTrackReferrals\":true,\"canViewReports\":true,\"canViewHistory\":true,\"canAuthorizeDiscount\":true,\"canAuthorizeCreditSale\":true,\"maxDiscountPercent\":10},\"remarks\":\"Specialized in smartphone accessories, wireless earbuds, and hair stylers.\"},{\"id\":\"branch_3\",\"name\":\"Raja Bazaar Wholesale & Trading Branch\",\"code\":\"BR-RWP-03\",\"address\":\"Plaza # 5, City Wholesale Market, Raja Bazaar, Rawalpindi\",\"contactNumber\":\"0333 9876543\",\"assignedManagerId\":\"usr_manager_3\",\"assignedManagerName\":\"Khurram Shehzad (Branch Manager)\",\"status\":\"active\",\"createdAt\":\"2026-02-01\",\"specialAuthorities\":{\"canRegisterWalkIn\":true,\"canEnterSales\":true,\"canViewStock\":true,\"canManageStock\":true,\"canRecordPayment\":true,\"canRecordCash\":true,\"canManageOrders\":true,\"canManageCustomers\":true,\"canAssignReferral\":true,\"canTrackReferrals\":true,\"canViewReports\":true,\"canViewHistory\":true,\"canAuthorizeDiscount\":true,\"canAuthorizeCreditSale\":true,\"maxDiscountPercent\":15},\"remarks\":\"Wholesale regional supply hub for Islamabad, Rawalpindi, and Northern areas.\"}]",
+        "updated_at": "2026-11-14T12:14:31.998Z"
+      },
+      {
+        "collection_key": "walkin_customers",
+        "data_json": "[{\"id\":\"walkin_1\",\"name\":\"Chaudhry Akram\",\"phone\":\"0300 5544332\",\"email\":\"akram@gmail.com\",\"branchId\":\"branch_1\",\"branchName\":\"Shah Alam Head Office & Main Wholesale Branch\",\"registrationDate\":\"2026-03-01\",\"salespersonCode\":\"SP-SHAHALAM-01\",\"status\":\"active\",\"notes\":\"Regular local walk-in retail buyer.\"},{\"id\":\"walkin_2\",\"name\":\"Malik Zeeshan\",\"phone\":\"0321 8877665\",\"branchId\":\"branch_2\",\"branchName\":\"Hall Road Electronics & Gadgets Branch\",\"registrationDate\":\"2026-03-05\",\"salespersonCode\":\"SP-HALLRD-02\",\"status\":\"active\"}]",
+        "updated_at": "2026-11-14T12:14:31.998Z"
+      },
+      {
+        "collection_key": "walkin_sales",
+        "data_json": "[{\"id\":\"wsale_1\",\"receiptNumber\":\"POS-BR01-100D-1042\",\"branchId\":\"branch_1\",\"branchName\":\"Shah Alam Head Office & Main Wholesale Branch\",\"managerId\":\"usr_manager_1\",\"managerName\":\"Muhammad Salman\",\"customerId\":\"walkin_1\",\"customerName\":\"Chaudhry Akram\",\"customerPhone\":\"0300 5544332\",\"salespersonCode\":\"SP-SHAHALAM-01\",\"items\":[{\"productId\":\"prod_1\",\"productName\":\"5-in-1 Hot Air Styler & Hair Dryer Brush\",\"variationDetails\":\"Standard 5-Head Salon Kit (Rose Gold)\",\"quantity\":2,\"unitPrice\":3490,\"marketPrice\":6980,\"totalAmount\":6980}],\"subtotal\":6980,\"discountAmount\":200,\"discountReason\":\"Store Counter Opening Special\",\"totalAmount\":6780,\"paidAmount\":6780,\"dueAmount\":0,\"paymentMethod\":\"cash\",\"paymentStatus\":\"completed\",\"saleDate\":\"2026-03-10\",\"timestamp\":\"2026-03-10T14:32:00.000Z\",\"notes\":\"Walk-in cash counter sale. Thermal receipt printed.\"}]",
+        "updated_at": "2026-11-14T12:14:31.998Z"
+      },
+      {
+        "collection_key": "salesperson_referrals",
+        "data_json": "[{\"id\":\"sp_1\",\"code\":\"SP-SHAHALAM-01\",\"salespersonName\":\"Hamza Rafiq\",\"phone\":\"0321 4455667\",\"branchId\":\"branch_1\",\"branchName\":\"Shah Alam Head Office & Main Wholesale Branch\",\"status\":\"active\",\"totalSales\":45000,\"paidSales\":45000,\"earnedCommission\":1350,\"paidCommission\":900,\"createdAt\":\"2026-01-10\"},{\"id\":\"sp_2\",\"code\":\"SP-HALLRD-02\",\"salespersonName\":\"Zubair Akram\",\"phone\":\"0302 9988776\",\"branchId\":\"branch_2\",\"branchName\":\"Hall Road Electronics & Gadgets Branch\",\"status\":\"active\",\"totalSales\":28000,\"paidSales\":28000,\"earnedCommission\":840,\"paidCommission\":0,\"createdAt\":\"2026-01-20\"},{\"id\":\"sp_3\",\"code\":\"SP-RAJA-03\",\"salespersonName\":\"Bilal Ahmed\",\"phone\":\"0345 1122334\",\"branchId\":\"branch_3\",\"branchName\":\"Raja Bazaar Wholesale & Trading Branch\",\"status\":\"active\",\"totalSales\":62000,\"paidSales\":62000,\"earnedCommission\":1860,\"paidCommission\":1500,\"createdAt\":\"2026-02-05\"}]",
+        "updated_at": "2026-11-14T12:14:31.998Z"
+      },
+      {
+        "collection_key": "commission_records",
+        "data_json": "[{\"id\":\"comm_1\",\"referralCode\":\"SP-SHAHALAM-01\",\"salespersonId\":\"sp_1\",\"salespersonName\":\"Hamza Rafiq\",\"branchId\":\"branch_1\",\"branchName\":\"Shah Alam Head Office & Main Wholesale Branch\",\"transactionId\":\"wsale_1\",\"receiptNumber\":\"POS-BR01-100D-1042\",\"saleType\":\"walk_in\",\"eligibleSalesAmount\":6780,\"commissionRate\":30,\"calculatedCommission\":203,\"status\":\"paid\",\"createdAt\":\"2026-03-10T14:32:00.000Z\",\"paidAt\":\"2026-03-10T18:00:00.000Z\",\"settlementReference\":\"VOUCHER-COMM-1042\"}]",
+        "updated_at": "2026-11-14T12:14:31.998Z"
+      },
+      {
+        "collection_key": "employees",
+        "data_json": "[{\"id\":\"emp_1\",\"name\":\"Asif Mehmood\",\"urduName\":\"آصف محمود\",\"phone\":\"03009876541\",\"cnic\":\"35201-1234567-1\",\"role\":\"manager\",\"baseSalary\":45000,\"allowances\":{\"medical\":5000,\"fuel\":8000,\"food\":6000,\"bonus\":3000},\"joiningDate\":\"2025-01-15\",\"status\":\"active\",\"notes\":\"Store operations & wholesale accounts manager\"},{\"id\":\"emp_2\",\"name\":\"Salman Khan\",\"urduName\":\"سلمان خان\",\"phone\":\"03224455667\",\"cnic\":\"35202-9876543-3\",\"role\":\"cashier\",\"baseSalary\":32000,\"allowances\":{\"medical\":3000,\"fuel\":4000,\"food\":5000,\"bonus\":2000},\"joiningDate\":\"2025-05-01\",\"status\":\"active\",\"notes\":\"POS billing and cash counter management\"},{\"id\":\"emp_3\",\"name\":\"Hamza Tariq\",\"urduName\":\"حمزہ طارق\",\"phone\":\"03159988776\",\"cnic\":\"35201-5544332-5\",\"role\":\"dispatcher\",\"baseSalary\":28000,\"allowances\":{\"medical\":2500,\"fuel\":3500,\"food\":5000,\"bonus\":1500},\"joiningDate\":\"2025-08-10\",\"status\":\"active\",\"notes\":\"COD packaging, courier manifest and dispatch\"},{\"id\":\"emp_4\",\"name\":\"Kashif Ali\",\"urduName\":\"کاشف علی\",\"phone\":\"03331122334\",\"cnic\":\"35201-7788990-7\",\"role\":\"rider\",\"baseSalary\":25000,\"allowances\":{\"medical\":2000,\"fuel\":10000,\"food\":4000,\"bonus\":2000},\"joiningDate\":\"2025-11-01\",\"status\":\"active\",\"notes\":\"Direct Lahore city rider delivery and cash collection\"}]",
+        "updated_at": "2026-11-14T12:14:31.998Z"
+      },
+      {
+        "collection_key": "attendance",
+        "data_json": "[{\"id\":\"att_1\",\"employeeId\":\"emp_1\",\"date\":\"2026-03-03\",\"status\":\"present\",\"checkInTime\":\"09:00 AM\"},{\"id\":\"att_2\",\"employeeId\":\"emp_2\",\"date\":\"2026-03-03\",\"status\":\"present\",\"checkInTime\":\"09:10 AM\"},{\"id\":\"att_3\",\"employeeId\":\"emp_3\",\"date\":\"2026-03-03\",\"status\":\"late\",\"checkInTime\":\"09:45 AM\",\"notes\":\"Traffic delay on Ring Road\"},{\"id\":\"att_4\",\"employeeId\":\"emp_4\",\"date\":\"2026-03-03\",\"status\":\"present\",\"checkInTime\":\"08:55 AM\"}]",
+        "updated_at": "2026-11-14T12:14:31.998Z"
+      },
+      {
+        "collection_key": "recurring_invoices",
+        "data_json": "[{\"id\":\"rec_1\",\"customerId\":\"cust_1\",\"title\":\"Bi-Weekly Fast Movers Restock\",\"frequency\":\"biweekly\",\"items\":[{\"description\":\"5-in-1 Hot Air Styler (10x)\",\"quantity\":10,\"unitPrice\":3490,\"amount\":34900}],\"totalAmount\":34900,\"startDate\":\"2026-03-01\",\"nextBillingDate\":\"2026-03-15\",\"status\":\"active\",\"autoSendWhatsApp\":true,\"createdAt\":\"2026-03-01T00:00:00Z\"}]",
+        "updated_at": "2026-11-14T12:14:31.998Z"
+      },
+      {
+        "collection_key": "notifications",
+        "data_json": "[]",
+        "updated_at": "2026-11-14T12:14:31.998Z"
+      },
+      {
+        "collection_key": "templates",
+        "data_json": "[{\"id\":\"tpl_pre_due_soft\",\"title\":\"Soft Reminder 3 Days Before Due (نرم یاددہانی ۳ دن قبل)\",\"titleUrdu\":\"ادائیگی کی تاریخ سے ۳ دن پہلے نرم یاددہانی\",\"type\":\"pre_due_soft\",\"content\":\"*Gentle Payment Notice (3 Days Notice) / قبل از وقت نرم یاد دہانی*\\n*{BUSINESS_NAME}*\\n\\nمحترم {CUSTOMER_NAME} صاحب،\\nامید ہے آپ خیریت سے ہوں گے۔ آپ کے کھاتے میں بل برائے رقم *{CURRENCY} {AMOUNT}* کی ادائیگی کی تاریخ *{DUE_DATE}* (آج سے ۳ دن بعد) ہے۔\\n\\nThis is a polite reminder that your invoice balance of *{CURRENCY} {AMOUNT}* is scheduled for payment on *{DUE_DATE}* (in 3 days).\\n\\n*Payment Channels / ادائیگی کے اکاؤنٹس:*\\n{PAYMENT_CHANNELS}\\n\\nبروقت تعاون کے پیش نظر پیشگی شکریہ!\"},{\"id\":\"tpl_due_today\",\"title\":\"Payment Due Today Alert (آج ادائیگی کی تاریخ ہے)\",\"titleUrdu\":\"آج ادائیگی کی تاریخ پر یاددہانی\",\"type\":\"due_today\",\"content\":\"🔔 *Payment Due Today / آج ادائیگی کی آخری تاریخ ہے*\\n*{BUSINESS_NAME}*\\n\\nمحترم {CUSTOMER_NAME} صاحب،\\nآپ کے کھاتے میں واجب الادا رقم: *{CURRENCY} {AMOUNT}*\\nآج ({DUE_DATE}) آپ کی ادائیگی کی آخری تاریخ ہے۔\\n\\nYour payment terms balance of *{CURRENCY} {AMOUNT}* is due today. Kindly transfer via EasyPaisa, JazzCash, or Bank.\\n\\n*Direct Accounts:*\\n{PAYMENT_CHANNELS}\\n\\nادائیگی کے بعد اسی نمبر پر اسکرین شاٹ لازمی شیئر فرمائیں۔ جزاک اللہ!\"},{\"id\":\"tpl_overdue_3days\",\"title\":\"Overdue Follow-up Every 3 Days (ہر ۳ دن بعد تاخیری نوٹس)\",\"titleUrdu\":\"ہر ۳ دن بعد تاخیری نوٹس تا وقتِ ادائیگی\",\"type\":\"overdue_3days\",\"content\":\"⚠️ *Overdue Payment Notice ({DAYS_OVERDUE} Days Overdue) / واجب الادا بقایا جات نوٹس*\\n*{BUSINESS_NAME}*\\n\\nمحترم {CUSTOMER_NAME} صاحب،\\nآپ کا بل برائے رقم *{CURRENCY} {AMOUNT}* کی آخری تاریخ گزر چکی ہے اور یہ *{DAYS_OVERDUE} دن زائد المیعاد* ہو چکا ہے۔\\n\\nNotice: Your balance of *{CURRENCY} {AMOUNT}* is now {DAYS_OVERDUE} days overdue. Kindly settle this outstanding amount today to keep your supply chain and credit terms active.\\n\\n*Payment Accounts:*\\n{PAYMENT_CHANNELS}\\n\\nفوری ادائیگی فرما کر کھاتہ کلیئر کریں۔ شکریہ!\"},{\"id\":\"tpl_weekly_due\",\"title\":\"Weekly Due Balance Reminder (ہفتہ وار واجب الادا بل)\",\"titleUrdu\":\"ہفتہ وار واجب الادا رقم کی یاد دہانی\",\"type\":\"weekly_due\",\"content\":\"*Weekly Due Payment Statement / ہفتہ وار واجب الادا یاد دہانی*\\n*{BUSINESS_NAME}*\\n\\nمحترم {CUSTOMER_NAME} صاحب،\\nآپ کے کھاتے میں موجودہ واجب الادا رقم: *{CURRENCY} {AMOUNT}*\\nKindly clear your due balance for this week.\\n\\n*Payment Channels / ادائیگی کے ذرائع:*\\n{PAYMENT_CHANNELS}\\n\\nبروقت ادائیگی پر آپ کے تعاون کے شکر گزار ہیں۔ جزاک اللہ!\"},{\"id\":\"tpl_lucky_draw\",\"title\":\"Top Buyer Lucky Draw Winner (لکی ڈرا انعام مبارکباد)\",\"titleUrdu\":\"لکی ڈرا جیتنے پر مبارکباد کا واٹس ایپ پیغام\",\"type\":\"lucky_draw_winner\",\"content\":\"🎉 *LUCKY DRAW WINNER ANNOUNCEMENT! / لکی ڈرا مبارکباد*\\n*{BUSINESS_NAME}*\\n\\nمحترم {CUSTOMER_NAME} صاحب،\\nبہت بہت مبارک ہو! آپ ہمارے *لکی ڈرا* میں فاتح قرار پائے ہیں! 🏆\\n\\n🎁 *Prize / انعام:* {PRODUCT_NAME}\\n🎟️ *Winning Voucher Code / واؤچر کوڈ:* *{PRODUCT_LINK}*\\n💰 *Voucher Reward Value:* {PRICE}\\n\\nآپ یہ واؤچر اپنے اگلے آرڈر پر کیش یا فلیٹ ڈسکاؤنٹ کے طور پر حاصل کر سکتے ہیں۔ 100DAGAR مدینہ مارکیٹ کے ساتھ جڑے رہنے کا بہت شکریہ!\\nReply to this message to claim your reward voucher.\"},{\"id\":\"tpl_product_broadcast\",\"title\":\"New Product Broadcast & Link (نئی پروڈکٹ اور لنک کا پیغام)\",\"titleUrdu\":\"تمام کسٹمرز کو نئی پروڈکٹ کی اطلاع\",\"type\":\"product_broadcast\",\"content\":\"📢 *New Arrival & Wholesale Deal! / نئی پروڈکٹ کی آمد*\\n*{BUSINESS_NAME}*\\n\\nمحترم کسٹمر، ہمارے پاس نیا اسٹاک آ گیا ہے!\\n\\n📦 *{PRODUCT_NAME}*\\n📝 {PRODUCT_DESCRIPTION}\\n💰 Wholesale Price: *{CURRENCY} {PRICE}*\\n\\n🔗 *Product Website Details / کیٹلاگ ویب سائٹ لنک:*\\n{PRODUCT_LINK}\\n\\nآرڈر بک کروانے کے لیے اسی واٹس ایپ پر رابطہ کریں۔ محدود اسٹاک!\\nFor instant booking, reply directly to this message.\"},{\"id\":\"tpl_receipt\",\"title\":\"Payment Received Acknowledgment (ادائیگی کی وصولی رسید)\",\"titleUrdu\":\"رقم وصولی کی تصدیقی رسید\",\"type\":\"receipt_thanks\",\"content\":\"✅ *Payment Received / رقم موصول ہو گئی ہے*\\n*{BUSINESS_NAME}*\\n\\nمحترم {CUSTOMER_NAME} صاحب،\\nہمیں آپ کی طرف سے *{CURRENCY} {AMOUNT}* بذریعہ {PAYMENT_MODE} موصول ہو گئے ہیں۔\\n\\nآپ کا باقی بقایا لیجر بیلنس: *{CURRENCY} {REMAINING_BALANCE}*\\n\\nThank you for your prompt payment! بروقت ادائیگی پر بہت شکریہ۔\"}]",
+        "updated_at": "2026-11-14T12:14:31.998Z"
+      },
+      {
+        "collection_key": "product_broadcasts",
+        "data_json": "[{\"id\":\"bcast_1\",\"productName\":\"5-in-1 Hot Air Styler & Hair Dryer Brush\",\"urduProductName\":\"فائیو ان ون ہاٹ ایئر ہیئر اسٹائلر\",\"description\":\"High demand salon grade styler in stock now. Market Price: Rs. 6,980. Our Wholesale: Rs. 3,490 only (-50% OFF).\",\"price\":3490,\"productLink\":\"https://100dagar.pk/products/5-in-1-hot-air-styler\",\"createdAt\":\"2026-03-01\"}]",
+        "updated_at": "2026-11-14T12:14:31.998Z"
+      },
+      {
+        "collection_key": "broadcast_contacts",
+        "data_json": "[{\"id\":\"contact_1\",\"name\":\"Chaudhry Bilal (Wholesale Retailer)\",\"phone\":\"03019876543\",\"city\":\"Faisalabad\",\"area\":\"Katchery Bazaar\",\"gender\":\"male\",\"ageGroup\":\"26-35\",\"type\":\"retail\",\"notes\":\"Retail chain with 3 shops in Faisalabad\",\"createdAt\":\"2026-03-01\"},{\"id\":\"contact_2\",\"name\":\"Mrs. Saima Rashid (Boutique)\",\"phone\":\"03456667788\",\"city\":\"Lahore\",\"area\":\"Gulberg III\",\"gender\":\"female\",\"ageGroup\":\"26-35\",\"type\":\"individual\",\"notes\":\"Home boutique reselling cosmetics & fashion\",\"createdAt\":\"2026-03-02\"}]",
+        "updated_at": "2026-11-14T12:14:31.998Z"
+      },
+      {
+        "collection_key": "saved_broadcasts",
+        "data_json": "[{\"id\":\"camp_1\",\"title\":\"5-in-1 Hot Air Styler New Arrival Alert\",\"productName\":\"5-in-1 Hot Air Styler & Hair Dryer Brush\",\"productLink\":\"https://100dagar.pk/products/5-in-1-hot-air-styler\",\"messageText\":\"📢 New wholesale arrival available with 50% discount. Click link to order!\",\"filters\":{\"area\":\"All Cities\",\"ageGroup\":\"All\",\"gender\":\"All\",\"customerGroup\":\"All Customers & Contacts\"},\"recipientsCount\":3,\"sentCount\":3,\"sentAt\":\"2026-03-01T14:00:00Z\",\"createdAt\":\"2026-03-01T14:00:00Z\"}]",
+        "updated_at": "2026-11-14T12:14:31.998Z"
+      },
+      {
+        "collection_key": "lucky_draws",
+        "data_json": "[{\"id\":\"lucky_demo_1\",\"title\":\"Grand Monthly Live Lucky Draw (ماہانہ لکی ڈرا)\",\"date\":\"2026-03-01\",\"totalParticipants\":1,\"status\":\"conducted\",\"upcomingItemGift\":\"Wireless Smart Nano Mist Sprayer\",\"winners\":[{\"rank\":1,\"customerId\":\"cust_1\",\"customerName\":\"Al-Madina Cosmetics & General Store\",\"phone\":\"03001234567\",\"prizeTitle\":\"1st Prize: 100% Discount Coupon Equal to Last Purchase (Top 10 Buyers Shuffle)\",\"voucherCode\":\"LUCKY-100D-TOP10-17450\",\"discountValue\":\"Rs. 17,450 (100% Paid Amount Coupon)\",\"customerType\":\"retail\",\"lastPurchaseAmount\":34900,\"lastPaidAmount\":17450,\"categoryRule\":\"1st Prize: 100% coupon equal to amount of last purchase shuffled among Top 10 buyers of the previous month\"},{\"rank\":2,\"customerId\":\"cust_1\",\"customerName\":\"Al-Madina Cosmetics & General Store\",\"phone\":\"03001234567\",\"prizeTitle\":\"2nd Prize: 50% Coupon Code of Last Purchase (All Monthly Customers Shuffle)\",\"voucherCode\":\"LUCKY-100D-ALLMONTH-8725\",\"discountValue\":\"Rs. 8,725 (50% Coupon Code)\",\"customerType\":\"retail\",\"lastPurchaseAmount\":34900,\"lastPaidAmount\":17450,\"categoryRule\":\"2nd Prize: 50% coupon code of last purchased amount randomly shuffled from all customers who shopped during last month\"},{\"rank\":3,\"customerId\":\"cust_1\",\"customerName\":\"Al-Madina Cosmetics & General Store\",\"phone\":\"03001234567\",\"prizeTitle\":\"3rd Prize: Rs. 500 Coupon Code for Product Review & Social Media Share\",\"voucherCode\":\"LUCKY-100D-REVIEW-500\",\"discountValue\":\"Rs. 500 Flat Coupon Code\",\"customerType\":\"retail\",\"reviewPlatform\":\"WhatsApp Status & Instagram\",\"categoryRule\":\"3rd Prize: Rs. 500 coupon code for reviewing purchased item and sharing review or product on social media\"}],\"notes\":\"Official 3-tier rules: 1st Prize: 100% coupon of last purchase among Top 10 buyers; 2nd Prize: 50% coupon of last purchase among all monthly buyers; 3rd Prize: Rs. 500 review & social share voucher.\",\"createdAt\":\"2026-03-01T18:00:00Z\"}]",
+        "updated_at": "2026-11-14T12:14:31.998Z"
+      },
+      {
+        "collection_key": "review_rewards",
+        "data_json": "[{\"id\":\"rev_1\",\"customerId\":\"cust_1\",\"customerName\":\"Al-Madina Cosmetics & General Store\",\"phone\":\"03001234567\",\"productName\":\"5-in-1 Hot Air Styler & Hair Dryer Brush\",\"platform\":\"whatsapp\",\"reviewText\":\"بہترین کوالٹی اور مارکیٹ سے 50 فیصد کم ریٹ پر مل گیا۔ گاہکوں کو بہت پسند آیا۔ 100DAGAR کا بہت شکریہ!\",\"postLink\":\"WhatsApp Status Screenshot Attached\",\"status\":\"approved\",\"voucherCode\":\"LUCKY-100D-REVIEW-500\",\"discountAmount\":500,\"createdAt\":\"2026-03-01T15:00:00Z\",\"approvedAt\":\"2026-03-01T16:00:00Z\"}]",
+        "updated_at": "2026-11-14T12:14:31.998Z"
+      },
+      {
+        "collection_key": "login_audits",
+        "data_json": "[{\"id\":\"log_1\",\"userName\":\"Shahzad Malik\",\"phone\":\"03125256266\",\"role\":\"super_admin\",\"timestamp\":\"2026-03-02T09:15:00Z\",\"status\":\"success\",\"ipOrDevice\":\"Main Office Terminal (Lahore)\",\"notes\":\"Super Admin Master Login verified\",\"usedPin\":\"••••••\"},{\"id\":\"log_2\",\"userName\":\"Al-Madina Cosmetics & General Store\",\"phone\":\"03001234567\",\"role\":\"customer\",\"timestamp\":\"2026-03-02T11:30:00Z\",\"status\":\"success\",\"ipOrDevice\":\"Mobile Web (Safari / iOS)\",\"notes\":\"Customer Mobile OTP/PIN Login\",\"usedPin\":\"••••••\"},{\"id\":\"log_3\",\"userName\":\"Usman Ghani\",\"phone\":\"03125256266\",\"role\":\"reseller\",\"timestamp\":\"2026-03-02T14:45:00Z\",\"status\":\"success\",\"ipOrDevice\":\"Android Chrome (Karachi)\",\"notes\":\"Reseller Portal Login with PIN\",\"usedPin\":\"••••••\"}]",
+        "updated_at": "2026-11-14T12:14:31.998Z"
+      },
+      {
+        "collection_key": "import_logs",
+        "data_json": "[{\"id\":\"implog_1\",\"sourceUrl\":\"https://example.com/products/5-in-1-hot-air-styler-hair-dryer-brush\",\"productTitle\":\"5-in-1 Hot Air Styler & Hair Dryer Brush\",\"status\":\"success\",\"variationsCount\":2,\"imagesCount\":3,\"timestamp\":\"2026-03-01T10:15:00Z\",\"notes\":\"Complete extraction of descriptions, specs, and 2 variations.\"}]",
+        "updated_at": "2026-11-14T12:14:31.998Z"
+      },
+      {
+        "collection_key": "business_profile",
+        "data_json": "{\"name\":\"100DAGAR\",\"tagline\":\"WE BUY WE SELL\",\"phone\":\"0312 5256 266\",\"email\":\"info@100dagar.pk\",\"address\":\"Shop # 14, Madina Market (مدینہ مارکیٹ), Shah Alam, Lahore, Pakistan\",\"ntnNumber\":\"7654321-9\",\"currencySymbol\":\"Rs.\",\"weeklyReminderDay\":\"Monday\",\"monthlyReminderDay\":1,\"autoSendEnabled\":true,\"defaultPaymentTermsDays\":7,\"loginFormConfig\":{\"title\":\"Sign In to 100DAGAR\",\"description\":\"Enter your credentials to access your secure account\",\"allowMobileLogin\":true,\"allowUsernameLogin\":true,\"allowEmailLogin\":true,\"showPasswordVisibilityToggle\":true,\"showRememberMe\":true,\"showForgotPasswordLink\":true,\"allowSelfRegistration\":true,\"supportContactNumber\":\"0312 5256 266\",\"loginInstructions\":\"Customers can log in using their registered mobile number and PIN. Default PIN is the last 6 digits of mobile number. Please change your temporary PIN immediately upon first sign in.\"},\"paymentChannels\":{\"easyPaisa\":{\"enabled\":true,\"accountTitle\":\"100DAGAR / مدینہ مارکیٹ\",\"accountNumber\":\"03125256266\"},\"jazzCash\":{\"enabled\":true,\"accountTitle\":\"100DAGAR / مدینہ مارکیٹ\",\"accountNumber\":\"03125256266\"},\"sadaPay\":{\"enabled\":true,\"accountTitle\":\"100DAGAR Business\",\"sadaTag\":\"@100dagar\",\"accountNumber\":\"03125256266\",\"iban\":\"PK82SADA0000001234567890\"},\"bankDetails\":{\"enabled\":true,\"bankName\":\"Meezan Bank Ltd (Islamic Banking)\",\"accountTitle\":\"100DAGAR Enterprises\",\"accountNumber\":\"01020304050607\",\"iban\":\"PK36MEZN0001020304050607\",\"branchName\":\"Shah Alam Market Branch, Lahore\"}},\"shippingPartner\":{\"name\":\"WASAL delivery\",\"apiKey\":\"SHIPDAY_API_KEY_LIVE_100D\",\"shipperPhone\":\"0312 5256 266\",\"helpline\":\"0312 5256 266\",\"originAddress\":\"Shop # 14, Madina Market (مدینہ مارکیٹ), Shah Alam, Lahore, Pakistan\",\"enabled\":true,\"autoSync\":true},\"deliveryCities\":[{\"id\":\"city_muzaffarabad\",\"name\":\"Muzaffarabad\",\"allowed\":true,\"areas\":[{\"id\":\"area_mzd_chattar\",\"name\":\"Chattar\",\"allowed\":true},{\"id\":\"area_mzd_chehla\",\"name\":\"Chehla Bandi\",\"allowed\":true},{\"id\":\"area_mzd_gojra\",\"name\":\"Gojra\",\"allowed\":true},{\"id\":\"area_mzd_lower_plate\",\"name\":\"Lower Plate\",\"allowed\":true},{\"id\":\"area_mzd_madina\",\"name\":\"Madina Market\",\"allowed\":true},{\"id\":\"area_mzd_tariqabad\",\"name\":\"Tariqabad\",\"allowed\":true},{\"id\":\"area_mzd_upper_adda\",\"name\":\"Upper Adda\",\"allowed\":true}]},{\"id\":\"city_mirpur\",\"name\":\"Mirpur (AJK)\",\"allowed\":true,\"areas\":[{\"id\":\"area_mrp_allama\",\"name\":\"Allama Iqbal Road\",\"allowed\":true},{\"id\":\"area_mrp_chaksawari\",\"name\":\"Chaksawari\",\"allowed\":true},{\"id\":\"area_mrp_f1\",\"name\":\"Sector F-1\",\"allowed\":true}]},{\"id\":\"city_rawalpindi\",\"name\":\"Rawalpindi\",\"allowed\":true,\"areas\":[{\"id\":\"area_rwp_bahria\",\"name\":\"Bahria Town\",\"allowed\":true},{\"id\":\"area_rwp_chaklala\",\"name\":\"Chaklala Scheme III\",\"allowed\":true},{\"id\":\"area_rwp_raja\",\"name\":\"Raja Bazaar\",\"allowed\":true},{\"id\":\"area_rwp_saddar\",\"name\":\"Saddar\",\"allowed\":true}]},{\"id\":\"city_islamabad\",\"name\":\"Islamabad\",\"allowed\":true,\"areas\":[{\"id\":\"area_isb_bluearea\",\"name\":\"Blue Area\",\"allowed\":true},{\"id\":\"area_isb_f10\",\"name\":\"Sector F-10 Markaz\",\"allowed\":true},{\"id\":\"area_isb_g11\",\"name\":\"Sector G-11\",\"allowed\":true}]},{\"id\":\"city_lahore\",\"name\":\"Lahore\",\"allowed\":true,\"areas\":[{\"id\":\"area_lhr_anarkali\",\"name\":\"Anarkali Bazaar\",\"allowed\":true},{\"id\":\"area_lhr_gulberg\",\"name\":\"Gulberg III\",\"allowed\":true},{\"id\":\"area_lhr_hallroad\",\"name\":\"Hall Road\",\"allowed\":true},{\"id\":\"area_lhr_johar\",\"name\":\"Johar Town\",\"allowed\":true},{\"id\":\"area_lhr_shahalam\",\"name\":\"Shah Alam Market\",\"allowed\":true}]},{\"id\":\"city_karachi\",\"name\":\"Karachi\",\"allowed\":true,\"areas\":[{\"id\":\"area_khi_bolton\",\"name\":\"Bolton Market\",\"allowed\":true},{\"id\":\"area_khi_gulshan\",\"name\":\"Gulshan-e-Iqbal\",\"allowed\":true},{\"id\":\"area_khi_saddar\",\"name\":\"Saddar\",\"allowed\":true}]},{\"id\":\"city_faisalabad\",\"name\":\"Faisalabad\",\"allowed\":true,\"areas\":[{\"id\":\"area_fsd_katchery\",\"name\":\"Katchery Bazaar\",\"allowed\":true}]},{\"id\":\"city_multan\",\"name\":\"Multan\",\"allowed\":true,\"areas\":[{\"id\":\"area_mux_hussain\",\"name\":\"Hussain Agahi\",\"allowed\":true}]},{\"id\":\"city_gujranwala\",\"name\":\"Gujranwala\",\"allowed\":true,\"areas\":[{\"id\":\"area_guj_rail\",\"name\":\"Rail Bazaar\",\"allowed\":true}]},{\"id\":\"city_sialkot\",\"name\":\"Sialkot\",\"allowed\":true,\"areas\":[{\"id\":\"area_skt_paris\",\"name\":\"Paris Road\",\"allowed\":true}]},{\"id\":\"city_peshawar\",\"name\":\"Peshawar\",\"allowed\":true,\"areas\":[{\"id\":\"area_pew_qissa\",\"name\":\"Qissa Khwani\",\"allowed\":true}]},{\"id\":\"city_abbottabad\",\"name\":\"Abbottabad\",\"allowed\":true,\"areas\":[{\"id\":\"area_abt_mandian\",\"name\":\"Mandian\",\"allowed\":true}]},{\"id\":\"city_quetta\",\"name\":\"Quetta\",\"allowed\":true,\"areas\":[{\"id\":\"area_uet_jinnah\",\"name\":\"Jinnah Road\",\"allowed\":true}]},{\"id\":\"city_bahawalpur\",\"name\":\"Bahawalpur\",\"allowed\":true,\"areas\":[{\"id\":\"area_bhv_farid\",\"name\":\"Farid Gate\",\"allowed\":true}]},{\"id\":\"city_sargodha\",\"name\":\"Sargodha\",\"allowed\":true,\"areas\":[{\"id\":\"area_sgd_urdu\",\"name\":\"Urdu Bazaar\",\"allowed\":true}]}],\"adminPin\":\"580987\"}",
+        "updated_at": "2026-11-14T12:15:01.531Z"
+      }
+    ],
+    "admin_audit_logs": [
+      {
+        "id": "aud_1794658501513_usrw",
+        "action": "activate_upcoming_arrival",
+        "entity_type": "product",
+        "entity_id": "test_upcoming_1794658501156",
+        "actor_id": "usr_superadmin",
+        "actor_name": "Shahzad Malik",
+        "actor_role": "super_admin",
+        "details_json": "{\"productName\":\"Verification Temp Upcoming Gadget\",\"targetCategory\":\"Cosmetics & Personal Care > Hair Care & Styling\",\"stockQty\":15,\"ourPrice\":950}",
+        "created_at": "2026-11-14T12:15:01.513Z"
+      }
+    ]
+  }
+}

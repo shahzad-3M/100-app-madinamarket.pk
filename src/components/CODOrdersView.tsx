@@ -36,6 +36,8 @@ import {
 import { openWhatsAppDirect } from '../utils/whatsapp';
 import { getWasalSettlements, saveWasalSettlements } from '../utils/storage';
 import { defaultDeliveryCities } from '../utils/defaultData';
+import { isProductPurchaseBlocked } from '../utils/locationCategoryHelpers';
+import { AddressFieldsGroup } from './AddressFieldsGroup';
 import {
   ToastBanner,
   ToastMessage,
@@ -109,12 +111,20 @@ export const CODOrdersView: React.FC<CODOrdersViewProps> = ({
   const [settlementRef, setSettlementRef] = useState<string>('');
   const [settlementNotes, setSettlementNotes] = useState<string>('');
 
+  const purchasableProducts = React.useMemo(
+    () => products.filter((p) => !isProductPurchaseBlocked(p)),
+    [products]
+  );
+
   // New Order Form State
   const [newCustName, setNewCustName] = useState('');
   const [newPhone, setNewPhone] = useState('');
   const [newCity, setNewCity] = useState(defaultCityName);
+  const [newArea, setNewArea] = useState('');
+  const [newMohalla, setNewMohalla] = useState('');
+  const [newLandmark, setNewLandmark] = useState('');
   const [newAddress, setNewAddress] = useState('');
-  const [newProductId, setNewProductId] = useState(products[0]?.id || '');
+  const [newProductId, setNewProductId] = useState(() => purchasableProducts[0]?.id || products[0]?.id || '');
   const [newQty, setNewQty] = useState(1);
   const [newDeliveryFee, setNewDeliveryFee] = useState(250);
   const [newCourier, setNewCourier] = useState<'WASAL delivery' | 'TCS' | 'Leopards' | 'Trax' | 'PostEx' | 'Rider' | 'Self'>('WASAL delivery');
@@ -244,10 +254,11 @@ export const CODOrdersView: React.FC<CODOrdersViewProps> = ({
   const handleCreateOrder = (e: React.FormEvent) => {
     e.preventDefault();
     setCreateOrderError(null);
-    const prod = products.find((p) => p.id === newProductId) || products[0];
-    if (!prod) {
-      setCreateOrderError('Please select a valid product.');
-      pushToast('Please select a valid product.', 'error');
+    const prod = purchasableProducts.find((p) => p.id === newProductId) || purchasableProducts[0];
+    if (!prod || isProductPurchaseBlocked(prod)) {
+      const errMsg = 'Upcoming / Coming Soon products cannot be booked for COD orders until arrival is confirmed.';
+      setCreateOrderError(errMsg);
+      pushToast(errMsg, 'error');
       return;
     }
 
@@ -261,6 +272,9 @@ export const CODOrdersView: React.FC<CODOrdersViewProps> = ({
       customerName: newCustName,
       phone: newPhone,
       city: newCity,
+      area: newArea.trim() || undefined,
+      mohalla: newMohalla.trim() || undefined,
+      landmark: newLandmark.trim() || undefined,
       address: newAddress,
       items: [
         {
@@ -290,6 +304,9 @@ export const CODOrdersView: React.FC<CODOrdersViewProps> = ({
     // Reset inputs
     setNewCustName('');
     setNewPhone('');
+    setNewArea('');
+    setNewMohalla('');
+    setNewLandmark('');
     setNewAddress('');
     setNewTracking('');
     pushToast(
@@ -548,9 +565,14 @@ export const CODOrdersView: React.FC<CODOrdersViewProps> = ({
                           <span className="font-bold text-slate-900 dark:text-white block">
                             {ord.customerName}
                           </span>
-                          <span className="text-[10px] text-slate-500">
-                            {ord.city} · {ord.phone}
+                          <span className="text-[10px] text-slate-500 block">
+                            {[ord.area, ord.mohalla, ord.city].filter(Boolean).join(', ')} · {ord.phone}
                           </span>
+                          {ord.landmark && (
+                            <span className="text-[10px] text-amber-600 dark:text-amber-400">
+                              Landmark: {ord.landmark}
+                            </span>
+                          )}
                         </td>
                         <td className="py-2.5 px-3 text-center">
                           <span
@@ -923,7 +945,10 @@ export const CODOrdersView: React.FC<CODOrdersViewProps> = ({
                     </div>
                     <div className="flex items-start gap-1.5 text-slate-600 dark:text-slate-400 text-[11px]">
                       <MapPin className="w-3 h-3 text-slate-400 shrink-0 mt-0.5" />
-                      <span>{order.address}, {order.city}</span>
+                      <span>
+                        {[order.address, order.mohalla, order.area, order.city].filter(Boolean).join(', ')}
+                        {order.landmark ? ` (Near: ${order.landmark})` : ''}
+                      </span>
                     </div>
                   </div>
 
@@ -1062,8 +1087,8 @@ export const CODOrdersView: React.FC<CODOrdersViewProps> = ({
       {/* 4. MODAL: BOOK NEW COD PARCEL */}
       {isAddOrderOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur-xs p-4 overflow-y-auto">
-          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl my-8">
-            <div className="bg-[#FFD200] p-4 flex items-center justify-between text-slate-900">
+          <div className="bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl my-6 max-h-[92vh] flex flex-col">
+            <div className="bg-[#FFD200] p-4 flex items-center justify-between text-slate-900 shrink-0">
               <div className="flex items-center gap-2">
                 <Truck className="w-5 h-5" />
                 <h2 className="text-base font-black">Book New COD Parcel (نیا کیش آن ڈلیوری پارسل)</h2>
@@ -1076,22 +1101,21 @@ export const CODOrdersView: React.FC<CODOrdersViewProps> = ({
               </button>
             </div>
 
-            <form onSubmit={handleCreateOrder} className="p-6 space-y-4 text-xs">
-              <div>
-                <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">
-                  Customer Full Name (گاہک کا نام)
-                </label>
-                <input
-                  type="text"
-                  value={newCustName}
-                  onChange={(e) => setNewCustName(e.target.value)}
-                  placeholder="e.g. Haji Rashid Store / Saima Ali"
-                  className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
-                  required
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
+            <form onSubmit={handleCreateOrder} className="p-6 space-y-4 text-xs overflow-y-auto">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">
+                    Customer Full Name (گاہک کا نام)
+                  </label>
+                  <input
+                    type="text"
+                    value={newCustName}
+                    onChange={(e) => setNewCustName(e.target.value)}
+                    placeholder="e.g. Haji Rashid Store / Saima Ali"
+                    className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
+                    required
+                  />
+                </div>
                 <div>
                   <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">
                     Phone Number (موبائل نمبر)
@@ -1105,36 +1129,31 @@ export const CODOrdersView: React.FC<CODOrdersViewProps> = ({
                     required
                   />
                 </div>
-                <div>
-                  <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">
-                    City (شہر)
-                  </label>
-                  <select
-                    value={newCity}
-                    onChange={(e) => setNewCity(e.target.value)}
-                    className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
-                    required
-                  >
-                    {allowedCities.map((c) => (
-                      <option key={c.name} value={c.name}>
-                        {c.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
               </div>
 
-              <div>
-                <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">
-                  Complete Delivery Address (مکمل پتہ)
-                </label>
-                <textarea
-                  rows={2}
-                  value={newAddress}
-                  onChange={(e) => setNewAddress(e.target.value)}
-                  placeholder="Shop #, Street, Area landmark..."
-                  className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
-                  required
+              <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-800/40 border border-slate-200 dark:border-slate-800">
+                <AddressFieldsGroup
+                  cities={
+                    profile.deliveryCities && profile.deliveryCities.length > 0
+                      ? profile.deliveryCities
+                      : defaultDeliveryCities
+                  }
+                  city={newCity}
+                  area={newArea}
+                  mohalla={newMohalla}
+                  landmark={newLandmark}
+                  address={newAddress}
+                  filterActiveCitiesOnly={true}
+                  showCompleteAddress={true}
+                  required={true}
+                  compact={true}
+                  onChange={(patch) => {
+                    if (patch.city !== undefined) setNewCity(patch.city);
+                    if (patch.area !== undefined) setNewArea(patch.area);
+                    if (patch.mohalla !== undefined) setNewMohalla(patch.mohalla);
+                    if (patch.landmark !== undefined) setNewLandmark(patch.landmark);
+                    if (patch.address !== undefined) setNewAddress(patch.address);
+                  }}
                 />
               </div>
 
@@ -1149,7 +1168,7 @@ export const CODOrdersView: React.FC<CODOrdersViewProps> = ({
                     onChange={(e) => setNewProductId(e.target.value)}
                     className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
                   >
-                    {products.map((p) => (
+                    {purchasableProducts.map((p) => (
                       <option key={p.id} value={p.id}>
                         {p.name} - {profile.currencySymbol}{p.ourPrice}
                       </option>
@@ -1283,8 +1302,13 @@ export const CODOrdersView: React.FC<CODOrdersViewProps> = ({
                 <p className="font-black text-sm text-slate-900">{selectedOrderForPrint.customerName}</p>
                 <p className="font-mono text-xs font-bold text-slate-800">📞 فون: {selectedOrderForPrint.phone}</p>
                 <p className="text-xs text-slate-700">
-                  📍 پتہ: {selectedOrderForPrint.address}, <b>{selectedOrderForPrint.city}</b>
+                  📍 پتہ: {[selectedOrderForPrint.address, selectedOrderForPrint.mohalla, selectedOrderForPrint.area].filter(Boolean).join(', ')}, <b>{selectedOrderForPrint.city}</b>
                 </p>
+                {selectedOrderForPrint.landmark && (
+                  <p className="text-[11px] text-slate-600">
+                    🏁 قریبی مشہور جگہ (Landmark): <b>{selectedOrderForPrint.landmark}</b>
+                  </p>
+                )}
               </div>
 
               {/* Shipper Helpline Details */}

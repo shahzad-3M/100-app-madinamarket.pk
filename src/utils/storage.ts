@@ -1,4 +1,5 @@
 import {
+  AdminAuditLog,
   AppUser,
   AttendanceRecord,
   Branch,
@@ -12,12 +13,13 @@ import {
   Employee,
   Investor,
   InvestorTransaction,
-  LoginFormConfig,
   LoginAuditRecord,
+  LoginFormConfig,
   LuckyDrawEvent,
   ProductBroadcast,
   ProductImportLog,
   ProductItem,
+  ProductVariation,
   RecurringInvoice,
   ReminderTemplate,
   Reseller,
@@ -46,8 +48,8 @@ import {
   defaultImportLogs,
   defaultInvestors,
   defaultInvestorTransactions,
-  defaultLoginFormConfig,
   defaultLoginAuditLogs,
+  defaultLoginFormConfig,
   defaultLuckyDrawEvents,
   defaultProductBroadcasts,
   defaultProducts,
@@ -64,6 +66,14 @@ import {
   defaultWasalSettlements,
   defaultWhatsAppNotifications,
 } from './defaultData';
+import {
+  ensureCityAreasShape,
+  isUpcomingCategoryName,
+  normalizeTextKey,
+  normalizeUpcomingCategoryRecord,
+  UPCOMING_CATEGORY_ID,
+  UPCOMING_CATEGORY_NAME,
+} from './locationCategoryHelpers';
 
 const STORAGE_KEYS = {
   PROFILE: '100dagar_business_profile_v5',
@@ -100,26 +110,559 @@ const STORAGE_KEYS = {
   WASAL_SETTLEMENTS: '100dagar_wasal_settlements_v5',
 };
 
-// Safe localStorage getter
+const MIGRATION_FLAG_KEY = '100dagar_server_migrated_v1';
+const SESSION_TOKEN_KEY = '100dagar_session_token_v1';
+
+// Unique per-tab client ID to suppress redundant self-triggered SSE reloads
+const CLIENT_ID = `cli_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
+
+// Maps localStorage keys <-> Central SQLite collection keys
+const STORAGE_TO_COLLECTION: Record<string, string> = {
+  [STORAGE_KEYS.PROFILE]: 'business_profile',
+  [STORAGE_KEYS.CUSTOMERS]: 'customers',
+  [STORAGE_KEYS.TRANSACTIONS]: 'transactions',
+  [STORAGE_KEYS.PRODUCTS]: 'products',
+  [STORAGE_KEYS.RECURRING]: 'recurring_invoices',
+  [STORAGE_KEYS.NOTIFICATIONS]: 'notifications',
+  [STORAGE_KEYS.TEMPLATES]: 'templates',
+  [STORAGE_KEYS.BROADCASTS]: 'product_broadcasts',
+  [STORAGE_KEYS.LUCKY_DRAWS]: 'lucky_draws',
+  [STORAGE_KEYS.BROADCAST_CONTACTS]: 'broadcast_contacts',
+  [STORAGE_KEYS.SAVED_BROADCASTS]: 'saved_broadcasts',
+  [STORAGE_KEYS.COD_ORDERS]: 'cod_orders',
+  [STORAGE_KEYS.EMPLOYEES]: 'employees',
+  [STORAGE_KEYS.ATTENDANCE]: 'attendance',
+  [STORAGE_KEYS.RESELLERS]: 'resellers',
+  [STORAGE_KEYS.REVIEW_REWARDS]: 'review_rewards',
+  [STORAGE_KEYS.LOGIN_AUDITS]: 'login_audits',
+  [STORAGE_KEYS.CATEGORY_RECORDS]: 'categories',
+  [STORAGE_KEYS.INVESTORS]: 'investors',
+  [STORAGE_KEYS.INVESTOR_TRANSACTIONS]: 'investor_transactions',
+  [STORAGE_KEYS.USER_ACCOUNTS]: 'user_accounts',
+  [STORAGE_KEYS.BRANCHES]: 'branches',
+  [STORAGE_KEYS.SP_REFERRALS]: 'salesperson_referrals',
+  [STORAGE_KEYS.WALK_IN_CUSTOMERS]: 'walkin_customers',
+  [STORAGE_KEYS.WALK_IN_SALES]: 'walkin_sales',
+  [STORAGE_KEYS.COMMISSIONS]: 'commission_records',
+  [STORAGE_KEYS.IMPORT_LOGS]: 'import_logs',
+  [STORAGE_KEYS.WASAL_SETTLEMENTS]: 'wasal_settlements',
+};
+
+const COLLECTION_TO_STORAGE: Record<string, string> = Object.fromEntries(
+  Object.entries(STORAGE_TO_COLLECTION).map(([sKey, cKey]) => [cKey, sKey])
+);
+
+// In-memory authoritative state cache hydrated from /api/sync/state
+const memoryStore = new Map<string, unknown>();
+let adminAuditLogsCache: AdminAuditLog[] = [];
+let syncListeners = new Set<() => void>();
+let currentSyncVersion = '';
+let sseSource: EventSource | null = null;
+let initializedPromise: Promise<void> | null = null;
+const pendingWriteQueues = new Map<string, Promise<void>>();
+
+export function getSessionToken(): string | null {
+  try {
+    return sessionStorage.getItem(SESSION_TOKEN_KEY) || localStorage.getItem(SESSION_TOKEN_KEY);
+  } catch {
+    return null;
+  }
+}
+
+export function setSessionToken(token: string | null): void {
+  try {
+    if (token) {
+      sessionStorage.setItem(SESSION_TOKEN_KEY, token);
+      localStorage.setItem(SESSION_TOKEN_KEY, token);
+    } else {
+      sessionStorage.removeItem(SESSION_TOKEN_KEY);
+      localStorage.removeItem(SESSION_TOKEN_KEY);
+    }
+  } catch {
+    // ignore storage errors
+  }
+}
+
+function getAuthHeaders(): Record<string, string> {
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    'x-client-id': CLIENT_ID,
+  };
+  const token = getSessionToken();
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`;
+  }
+  const user = getCurrentUser();
+  if (user && user.isAuthenticated) {
+    headers['x-actor-id'] = user.id;
+    headers['x-actor-role'] = user.role;
+    headers['x-actor-name'] = user.name;
+  }
+  return headers;
+}
+
+function notifyListeners() {
+  for (const cb of syncListeners) {
+    try {
+      cb();
+    } catch (e) {
+      console.error('Sync listener error:', e);
+    }
+  }
+}
+
+// Safe localStorage + memoryStore getter
 function loadFromStorage<T>(key: string, defaultValue: T): T {
+  if (memoryStore.has(key)) {
+    return memoryStore.get(key) as T;
+  }
   try {
     const item = localStorage.getItem(key);
     if (!item) return defaultValue;
-    return JSON.parse(item);
+    const parsed = JSON.parse(item) as T;
+    memoryStore.set(key, parsed);
+    return parsed;
   } catch (e) {
     console.error(`Error loading ${key} from localStorage`, e);
     return defaultValue;
   }
 }
 
-// Safe localStorage setter
-function saveToStorage<T>(key: string, value: T): void {
+function queueServerCollectionWrite(collectionKey: string, value: unknown) {
+  if (typeof window === 'undefined') return;
+  const prev = pendingWriteQueues.get(collectionKey) || Promise.resolve();
+  const next = prev
+    .then(async () => {
+      const res = await fetch(`/api/collections/${encodeURIComponent(collectionKey)}`, {
+        method: 'PUT',
+        headers: getAuthHeaders(),
+        cache: 'no-store',
+        body: JSON.stringify({ data: value }),
+      });
+      if (res.ok) {
+        const json = (await res.json()) as { syncVersion?: string };
+        if (json.syncVersion) currentSyncVersion = json.syncVersion;
+      }
+    })
+    .catch((err) => {
+      console.warn(`Background sync failed for ${collectionKey}:`, err);
+    });
+  pendingWriteQueues.set(collectionKey, next);
+}
+
+// Safe localStorage + central backend setter
+function saveToStorage<T>(key: string, value: T, skipRemotePush = false): void {
+  memoryStore.set(key, value);
   try {
     localStorage.setItem(key, JSON.stringify(value));
   } catch (e) {
     console.error(`Error saving ${key} to localStorage`, e);
   }
+  const collectionKey = STORAGE_TO_COLLECTION[key];
+  if (!skipRemotePush && collectionKey) {
+    queueServerCollectionWrite(collectionKey, value);
+  }
 }
+
+function applyServerStateSnapshot(state: Record<string, unknown>) {
+  if (!state || typeof state !== 'object') return;
+  if (typeof state.syncVersion === 'string') {
+    currentSyncVersion = state.syncVersion;
+  }
+  if (Array.isArray(state.admin_audit_logs)) {
+    adminAuditLogsCache = state.admin_audit_logs as AdminAuditLog[];
+  }
+  for (const [colKey, sKey] of Object.entries(COLLECTION_TO_STORAGE)) {
+    if (state[colKey] !== undefined) {
+      let val = state[colKey];
+      if (colKey === 'business_profile' && val && typeof val === 'object') {
+        const bp = val as BusinessProfile;
+        if (!bp.deliveryCities && Array.isArray(state.cities)) {
+          val = { ...bp, deliveryCities: state.cities as DeliveryCityConfig[] };
+        }
+      }
+      memoryStore.set(sKey, val);
+      try {
+        // Never persist unauthenticated redacted profile over local if user isn't logged in,
+        // or cleanly mirror safe server copy to localStorage cache
+        localStorage.setItem(sKey, JSON.stringify(val));
+      } catch {
+        // ignore quota errors on large image galleries
+      }
+    }
+  }
+}
+
+export async function refreshSyncState(): Promise<boolean> {
+  if (typeof window === 'undefined') return false;
+  try {
+    const res = await fetch('/api/sync/state', {
+      method: 'GET',
+      headers: getAuthHeaders(),
+      cache: 'no-store',
+    });
+    if (!res.ok) return false;
+    const data = (await res.json()) as Record<string, unknown>;
+    applyServerStateSnapshot(data);
+    notifyListeners();
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function migrateLocalStorageIfNeeded(): Promise<void> {
+  if (typeof window === 'undefined') return;
+  try {
+    if (localStorage.getItem(MIGRATION_FLAG_KEY) === 'done') return;
+
+    const collections: Record<string, unknown> = {};
+    let hasAnyLocalData = false;
+    for (const [sKey, colKey] of Object.entries(STORAGE_TO_COLLECTION)) {
+      const raw = localStorage.getItem(sKey);
+      if (raw) {
+        try {
+          collections[colKey] = JSON.parse(raw);
+          hasAnyLocalData = true;
+        } catch {
+          // skip corrupt JSON
+        }
+      }
+    }
+
+    if (hasAnyLocalData) {
+      await fetch('/api/sync/migrate-local', {
+        method: 'POST',
+        headers: getAuthHeaders(),
+        cache: 'no-store',
+        body: JSON.stringify({ collections }),
+      });
+    }
+    localStorage.setItem(MIGRATION_FLAG_KEY, 'done');
+  } catch (err) {
+    console.warn('Non-destructive localStorage migration skipped or deferred:', err);
+  }
+}
+
+export function initSyncStore(): Promise<void> {
+  if (initializedPromise) return initializedPromise;
+  initializedPromise = (async () => {
+    await migrateLocalStorageIfNeeded();
+    await refreshSyncState();
+  })();
+  return initializedPromise;
+}
+
+export function subscribeToServerSync(listener: () => void): () => void {
+  syncListeners.add(listener);
+
+  if (typeof window !== 'undefined' && !sseSource) {
+    try {
+      sseSource = new EventSource('/api/events');
+      sseSource.addEventListener('sync', (ev) => {
+        try {
+          const payload = JSON.parse((ev as MessageEvent).data) as {
+            sourceClientId?: string;
+            updatedAt?: string;
+          };
+          if (payload.sourceClientId && payload.sourceClientId === CLIENT_ID) {
+            return; // Ignore our own echo
+          }
+          if (payload.updatedAt && payload.updatedAt === currentSyncVersion) {
+            return;
+          }
+        } catch {
+          // refresh anyway
+        }
+        void refreshSyncState();
+      });
+    } catch {
+      // EventSource not supported or blocked
+    }
+
+    const onFocusOrVisible = () => {
+      if (document.visibilityState === 'visible') {
+        void refreshSyncState();
+      }
+    };
+    window.addEventListener('focus', onFocusOrVisible);
+    document.addEventListener('visibilitychange', onFocusOrVisible);
+
+    // Lightweight periodic sync check (15s) as fallback
+    const interval = window.setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        void refreshSyncState();
+      }
+    }, 15000);
+
+    return () => {
+      syncListeners.delete(listener);
+      if (syncListeners.size === 0) {
+        sseSource?.close();
+        sseSource = null;
+        window.removeEventListener('focus', onFocusOrVisible);
+        document.removeEventListener('visibilitychange', onFocusOrVisible);
+        window.clearInterval(interval);
+      }
+    };
+  }
+
+  return () => {
+    syncListeners.delete(listener);
+  };
+}
+
+// ==========================================
+// SERVER-VALIDATED DOMAIN API ACTIONS
+// ==========================================
+
+export async function apiAuthenticateLogin(
+  identifier: string,
+  pin: string
+): Promise<{ ok: boolean; user?: Partial<AppUser>; sessionToken?: string }> {
+  try {
+    const res = await fetch('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'x-client-id': CLIENT_ID },
+      cache: 'no-store',
+      body: JSON.stringify({ identifier, pin }),
+    });
+    if (!res.ok) return { ok: false };
+    const data = (await res.json()) as { ok: boolean; user?: Partial<AppUser>; sessionToken?: string };
+    if (data.ok && data.sessionToken) {
+      setSessionToken(data.sessionToken);
+      await refreshSyncState();
+    }
+    return data;
+  } catch {
+    return { ok: false };
+  }
+}
+
+export async function apiActivateProductArrival(
+  productId: string,
+  payload: {
+    parentCategoryId: string;
+    subcategoryId?: string;
+    childSubcategoryId?: string;
+    ourPrice: number;
+    marketPrice: number;
+    costPrice: number;
+    stockQty: number;
+    variations?: ProductVariation[];
+    details?: string;
+    badgeText?: string;
+  }
+): Promise<{ ok: boolean; product?: ProductItem; error?: string }> {
+  try {
+    const res = await fetch(`/api/products/${encodeURIComponent(productId)}/activate-arrival`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      cache: 'no-store',
+      body: JSON.stringify(payload),
+    });
+    const data = (await res.json()) as { ok?: boolean; product?: ProductItem; error?: string };
+    if (!res.ok) {
+      return { ok: false, error: data.error || 'Failed to confirm arrival.' };
+    }
+    await refreshSyncState();
+    return { ok: true, product: data.product };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : 'Network error' };
+  }
+}
+
+export async function apiSaveCategoryRecord(
+  payload: Partial<CategoryRecord>,
+  existingId?: string
+): Promise<{ ok: boolean; category?: CategoryRecord; categories?: CategoryRecord[]; error?: string }> {
+  try {
+    const url = existingId
+      ? `/api/categories/${encodeURIComponent(existingId)}`
+      : '/api/categories';
+    const res = await fetch(url, {
+      method: existingId ? 'PUT' : 'POST',
+      headers: getAuthHeaders(),
+      cache: 'no-store',
+      body: JSON.stringify(payload),
+    });
+    const data = (await res.json()) as {
+      ok?: boolean;
+      category?: CategoryRecord;
+      categories?: CategoryRecord[];
+      error?: string;
+    };
+    if (!res.ok) return { ok: false, error: data.error || 'Category operation failed.' };
+    await refreshSyncState();
+    return { ok: true, category: data.category, categories: data.categories };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : 'Network error' };
+  }
+}
+
+export async function apiDeleteCategoryRecord(
+  id: string
+): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const res = await fetch(`/api/categories/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+      headers: getAuthHeaders(),
+      cache: 'no-store',
+    });
+    const data = (await res.json()) as { ok?: boolean; error?: string };
+    if (!res.ok) return { ok: false, error: data.error || 'Cannot delete category.' };
+    await refreshSyncState();
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : 'Network error' };
+  }
+}
+
+export async function apiAddCity(
+  name: string,
+  allowed = true
+): Promise<{ ok: boolean; cities?: DeliveryCityConfig[]; error?: string }> {
+  try {
+    const res = await fetch('/api/cities', {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      cache: 'no-store',
+      body: JSON.stringify({ name, allowed }),
+    });
+    const data = (await res.json()) as { ok?: boolean; cities?: DeliveryCityConfig[]; error?: string };
+    if (!res.ok) return { ok: false, error: data.error || 'Failed to add city.' };
+    await refreshSyncState();
+    return { ok: true, cities: data.cities };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : 'Network error' };
+  }
+}
+
+export async function apiUpdateCity(
+  idOrName: string,
+  updates: { name?: string; allowed?: boolean }
+): Promise<{ ok: boolean; cities?: DeliveryCityConfig[]; error?: string }> {
+  try {
+    const res = await fetch(`/api/cities/${encodeURIComponent(idOrName)}`, {
+      method: 'PUT',
+      headers: getAuthHeaders(),
+      cache: 'no-store',
+      body: JSON.stringify(updates),
+    });
+    const data = (await res.json()) as { ok?: boolean; cities?: DeliveryCityConfig[]; error?: string };
+    if (!res.ok) return { ok: false, error: data.error || 'Failed to update city.' };
+    await refreshSyncState();
+    return { ok: true, cities: data.cities };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : 'Network error' };
+  }
+}
+
+export async function apiAddCityArea(
+  cityIdOrName: string,
+  name: string,
+  allowed = true
+): Promise<{ ok: boolean; cities?: DeliveryCityConfig[]; error?: string }> {
+  try {
+    const res = await fetch(`/api/cities/${encodeURIComponent(cityIdOrName)}/areas`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      cache: 'no-store',
+      body: JSON.stringify({ name, allowed }),
+    });
+    const data = (await res.json()) as { ok?: boolean; cities?: DeliveryCityConfig[]; error?: string };
+    if (!res.ok) return { ok: false, error: data.error || 'Failed to add area.' };
+    await refreshSyncState();
+    return { ok: true, cities: data.cities };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : 'Network error' };
+  }
+}
+
+export async function apiUpdateCityArea(
+  areaId: string,
+  updates: { name?: string; allowed?: boolean }
+): Promise<{ ok: boolean; cities?: DeliveryCityConfig[]; error?: string }> {
+  try {
+    const res = await fetch(`/api/areas/${encodeURIComponent(areaId)}`, {
+      method: 'PUT',
+      headers: getAuthHeaders(),
+      cache: 'no-store',
+      body: JSON.stringify(updates),
+    });
+    const data = (await res.json()) as { ok?: boolean; cities?: DeliveryCityConfig[]; error?: string };
+    if (!res.ok) return { ok: false, error: data.error || 'Failed to update area.' };
+    await refreshSyncState();
+    return { ok: true, cities: data.cities };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : 'Network error' };
+  }
+}
+
+export async function apiDeleteCityArea(
+  areaId: string
+): Promise<{ ok: boolean; cities?: DeliveryCityConfig[]; error?: string }> {
+  try {
+    const res = await fetch(`/api/areas/${encodeURIComponent(areaId)}`, {
+      method: 'DELETE',
+      headers: getAuthHeaders(),
+      cache: 'no-store',
+    });
+    const data = (await res.json()) as { ok?: boolean; cities?: DeliveryCityConfig[]; error?: string };
+    if (!res.ok) return { ok: false, error: data.error || 'Failed to remove area.' };
+    await refreshSyncState();
+    return { ok: true, cities: data.cities };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : 'Network error' };
+  }
+}
+
+export async function apiSubmitCheckoutOrder(payload: {
+  items: Array<{ productId: string; quantity: number }>;
+  customer?: Customer;
+  transaction?: Transaction;
+  codOrder?: CODOrder;
+  resellerId?: string;
+}): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const res = await fetch('/api/orders/checkout', {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      cache: 'no-store',
+      body: JSON.stringify(payload),
+    });
+    const data = (await res.json()) as { ok?: boolean; error?: string };
+    if (!res.ok) return { ok: false, error: data.error || 'Checkout blocked by server validation.' };
+    await refreshSyncState();
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : 'Network error' };
+  }
+}
+
+export async function apiCreateServerBackup(reason = 'manual'): Promise<{ ok: boolean; error?: string }> {
+  try {
+    const res = await fetch('/api/admin/backup', {
+      method: 'POST',
+      headers: getAuthHeaders(),
+      cache: 'no-store',
+      body: JSON.stringify({ reason }),
+    });
+    const data = (await res.json()) as { ok?: boolean; error?: string };
+    if (!res.ok) return { ok: false, error: data.error || 'Backup failed.' };
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : 'Network error' };
+  }
+}
+
+export function getAdminAuditLogs(): AdminAuditLog[] {
+  return adminAuditLogsCache;
+}
+
+// ==========================================
+// EXISTING STORAGE EXPORTS (BACKWARD COMPATIBLE)
+// ==========================================
 
 // Business Profile
 export function getBusinessProfile(): BusinessProfile {
@@ -131,20 +674,28 @@ export function getBusinessProfile(): BusinessProfile {
     prof.adminPin = '580987';
   }
   if (!prof.deliveryCities || prof.deliveryCities.length === 0) {
-    prof.deliveryCities = defaultDeliveryCities.map((c) => ({ ...c }));
-  } else if (!prof.deliveryCities.some((c) => c.name.toLowerCase() === 'muzaffarabad')) {
-    prof.deliveryCities = [{ name: 'Muzaffarabad', allowed: true }, ...prof.deliveryCities];
+    prof.deliveryCities = ensureCityAreasShape(defaultDeliveryCities);
+  } else {
+    prof.deliveryCities = ensureCityAreasShape(prof.deliveryCities);
+    if (!prof.deliveryCities.some((c) => c.name.toLowerCase() === 'muzaffarabad')) {
+      const defMzd = defaultDeliveryCities.find((c) => c.name.toLowerCase() === 'muzaffarabad')!;
+      prof.deliveryCities = [defMzd, ...prof.deliveryCities];
+    }
   }
   return prof;
 }
 
 export function saveBusinessProfile(profile: BusinessProfile): void {
-  saveToStorage(STORAGE_KEYS.PROFILE, profile);
+  const normalized = {
+    ...profile,
+    deliveryCities: profile.deliveryCities ? ensureCityAreasShape(profile.deliveryCities) : undefined,
+  };
+  saveToStorage(STORAGE_KEYS.PROFILE, normalized);
 }
 
 export function resetDeliveryCities(): DeliveryCityConfig[] {
   const prof = getBusinessProfile();
-  const fresh = defaultDeliveryCities.map((c) => ({ ...c }));
+  const fresh = ensureCityAreasShape(defaultDeliveryCities);
   saveBusinessProfile({ ...prof, deliveryCities: fresh });
   return fresh;
 }
@@ -167,36 +718,45 @@ export function saveProducts(products: ProductItem[]): void {
   saveToStorage(STORAGE_KEYS.PRODUCTS, products);
 }
 
-// Centrally Managed Product Categories
+// Centrally Managed Product Categories (3-level normalized)
 export function getCategoryRecords(): CategoryRecord[] {
-  return loadFromStorage<CategoryRecord[]>(STORAGE_KEYS.CATEGORY_RECORDS, defaultCategoryRecords);
+  const raw = loadFromStorage<CategoryRecord[]>(STORAGE_KEYS.CATEGORY_RECORDS, defaultCategoryRecords);
+  const normalized = raw.map(normalizeUpcomingCategoryRecord);
+  if (!normalized.some((c) => c.id === UPCOMING_CATEGORY_ID || c.isUpcoming)) {
+    const defUpcoming = defaultCategoryRecords.find((c) => c.id === UPCOMING_CATEGORY_ID)!;
+    normalized.push(defUpcoming);
+  }
+  return normalized;
 }
 
 export function saveCategoryRecords(records: CategoryRecord[]): void {
-  saveToStorage(STORAGE_KEYS.CATEGORY_RECORDS, records);
+  const normalized = records.map(normalizeUpcomingCategoryRecord);
+  saveToStorage(STORAGE_KEYS.CATEGORY_RECORDS, normalized);
 }
 
 export function getCategories(): string[] {
-  const defaultCats = [
-    'Cosmetics & Personal Care',
-    'Fashion & Apparel',
-    'Decorative Items',
-    'Electronics & Gadgets',
-    'Kitchen & Home',
-    'Accessories',
-    'Upcoming / Viral Products',
-  ];
   const records = getCategoryRecords();
   const recordNames = records.map((r) => r.name.trim()).filter(Boolean);
   const products = getProducts();
-  const productCats = products.map((p) => p.category?.trim()).filter(Boolean);
+  const productCats = products
+    .map((p) => (isUpcomingCategoryName(p.category) ? UPCOMING_CATEGORY_NAME : p.category?.trim()))
+    .filter(Boolean) as string[];
   const stored = loadFromStorage<string[]>(STORAGE_KEYS.CATEGORIES, []);
-  const combined = Array.from(new Set([...defaultCats, ...recordNames, ...stored, ...productCats]));
+  const normalizedStored = stored
+    .map((c) => (isUpcomingCategoryName(c) ? UPCOMING_CATEGORY_NAME : c.trim()))
+    .filter(Boolean);
+  const combined = Array.from(new Set([...recordNames, ...normalizedStored, ...productCats]));
   return combined.sort((a, b) => a.localeCompare(b));
 }
 
 export function saveCategories(categories: string[]): void {
-  const clean = Array.from(new Set(categories.map((c) => c.trim()).filter(Boolean))).sort((a, b) => a.localeCompare(b));
+  const clean = Array.from(
+    new Set(
+      categories
+        .map((c) => (isUpcomingCategoryName(c) ? UPCOMING_CATEGORY_NAME : c.trim()))
+        .filter(Boolean)
+    )
+  ).sort((a, b) => a.localeCompare(b));
   saveToStorage(STORAGE_KEYS.CATEGORIES, clean);
 }
 
@@ -205,22 +765,31 @@ export function addCategory(
   parentCategoryId?: string,
   isUpcoming: boolean = false
 ): { categories: string[]; added: boolean; record?: CategoryRecord } {
-  const trimmed = newCategory.trim();
+  const trimmed = isUpcoming || isUpcomingCategoryName(newCategory)
+    ? UPCOMING_CATEGORY_NAME
+    : newCategory.trim();
   if (!trimmed) return { categories: getCategories(), added: false };
   const current = getCategories();
-  const exists = current.some((c) => c.toLowerCase() === trimmed.toLowerCase());
-  
-  // Also register in CategoryRecord
+  const exists = current.some((c) => normalizeTextKey(c) === normalizeTextKey(trimmed));
+
   const records = getCategoryRecords();
-  const recordExists = records.some((r) => r.name.toLowerCase() === trimmed.toLowerCase());
+  const recordExists = records.some(
+    (r) =>
+      normalizeTextKey(r.name) === normalizeTextKey(trimmed) &&
+      (r.parentCategoryId || '') === (parentCategoryId || '')
+  );
   let newRecord: CategoryRecord | undefined = undefined;
 
   if (!recordExists) {
+    const parent = parentCategoryId ? records.find((r) => r.id === parentCategoryId) : undefined;
+    const level: 1 | 2 | 3 = !parent ? 1 : parent.parentCategoryId ? 3 : 2;
     newRecord = {
       id: `cat_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
       name: trimmed,
       parentCategoryId,
+      level,
       isUpcoming,
+      isActive: true,
       displayOrder: records.length + 1,
     };
     saveCategoryRecords([...records, newRecord]);
@@ -236,8 +805,14 @@ export function addCategory(
 
 // Safely delete category if no active products are using it
 export function deleteCategory(categoryName: string): { success: boolean; message: string } {
+  if (isUpcomingCategoryName(categoryName)) {
+    return {
+      success: false,
+      message: `"${UPCOMING_CATEGORY_NAME}" is a required store category and cannot be deleted.`,
+    };
+  }
   const products = getProducts();
-  const inUse = products.some((p) => p.category?.trim().toLowerCase() === categoryName.trim().toLowerCase());
+  const inUse = products.some((p) => normalizeTextKey(p.category) === normalizeTextKey(categoryName));
   if (inUse) {
     return {
       success: false,
@@ -245,12 +820,20 @@ export function deleteCategory(categoryName: string): { success: boolean; messag
     };
   }
 
+  const records = getCategoryRecords();
+  const targetRec = records.find((r) => normalizeTextKey(r.name) === normalizeTextKey(categoryName));
+  if (targetRec && records.some((r) => r.parentCategoryId === targetRec.id)) {
+    return {
+      success: false,
+      message: `Cannot delete '${categoryName}' because it contains subcategories. Remove or move subcategories first.`,
+    };
+  }
+
   const current = getCategories();
-  const updated = current.filter((c) => c.toLowerCase() !== categoryName.toLowerCase());
+  const updated = current.filter((c) => normalizeTextKey(c) !== normalizeTextKey(categoryName));
   saveCategories(updated);
 
-  const records = getCategoryRecords();
-  const updatedRecords = records.filter((r) => r.name.toLowerCase() !== categoryName.toLowerCase());
+  const updatedRecords = records.filter((r) => normalizeTextKey(r.name) !== normalizeTextKey(categoryName));
   saveCategoryRecords(updatedRecords);
 
   return { success: true, message: `Category '${categoryName}' removed successfully.` };
@@ -260,20 +843,19 @@ export function deleteCategory(categoryName: string): { success: boolean; messag
 export function cleanupDuplicateCategories(): { mergedCount: number; remaining: string[] } {
   const products = getProducts();
   const cats = getCategories();
-  const map = new Map<string, string>(); // lowercase -> canonical name
+  const map = new Map<string, string>();
   let mergedCount = 0;
 
-  // Build canonical map
   cats.forEach((cat) => {
-    const lower = cat.toLowerCase();
+    const canonicalName = isUpcomingCategoryName(cat) ? UPCOMING_CATEGORY_NAME : cat.trim();
+    const lower = canonicalName.toLowerCase();
     if (!map.has(lower)) {
-      map.set(lower, cat);
+      map.set(lower, canonicalName);
     } else {
       mergedCount++;
     }
   });
 
-  // Re-map any products referencing duplicate/differently-cased names
   let productsChanged = false;
   const updatedProducts = products.map((p) => {
     if (p.category) {
@@ -432,7 +1014,7 @@ export const defaultGuestUser: AppUser = {
 
 export const defaultCustomerUser: AppUser = defaultGuestUser;
 
-// Active Role & User Session (USER DIRECTIVE: Default to Customer)
+// Active Role & User Session (stays per browser/session)
 export function getActiveRole(): UserRole {
   const user = getCurrentUser();
   if (!user || user.isAuthenticated !== true) {
@@ -442,12 +1024,11 @@ export function getActiveRole(): UserRole {
 }
 
 export function saveActiveRole(role: UserRole): void {
-  saveToStorage(STORAGE_KEYS.ACTIVE_ROLE, role);
+  saveToStorage(STORAGE_KEYS.ACTIVE_ROLE, role, true);
 }
 
 export function getCurrentUser(): AppUser {
   const user = loadFromStorage<AppUser>(STORAGE_KEYS.CURRENT_USER, defaultGuestUser);
-  // If legacy session had user_cust_default or isAuthenticated is not strictly true, treat as unauthenticated guest
   if (!user || user.id === 'user_cust_default' || user.isAuthenticated !== true) {
     return defaultGuestUser;
   }
@@ -455,10 +1036,10 @@ export function getCurrentUser(): AppUser {
 }
 
 export function saveCurrentUser(user: AppUser): void {
-  saveToStorage(STORAGE_KEYS.CURRENT_USER, user);
+  saveToStorage(STORAGE_KEYS.CURRENT_USER, user, true);
 }
 
-// Login Audits & History (USER DIRECTIVE: history of all users pin and login information inside admin area)
+// Login Audits & History
 export function getLoginAudits(): LoginAuditRecord[] {
   return loadFromStorage<LoginAuditRecord[]>(STORAGE_KEYS.LOGIN_AUDITS, defaultLoginAuditLogs);
 }
@@ -477,7 +1058,7 @@ export function saveLoginAudits(logs: LoginAuditRecord[]): void {
   saveToStorage(STORAGE_KEYS.LOGIN_AUDITS, logs);
 }
 
-// Default PIN extraction from mobile number (USER DIRECTIVE: default pin suggestion 6 digits can be last 6 digits of mobile number)
+// Default PIN extraction from mobile number
 export function getDefaultPinForPhone(phone: string): string {
   const digits = phone.replace(/\D/g, '');
   if (digits.length >= 6) {
@@ -486,7 +1067,7 @@ export function getDefaultPinForPhone(phone: string): string {
   return digits.padEnd(6, '0');
 }
 
-// User PIN update functions (USER DIRECTIVE: only show to user inside portal change pin option)
+// User PIN update functions
 export function updateCustomerPin(customerId: string, newPin: string): boolean {
   const custs = getCustomers();
   const updated = custs.map((c) => (c.id === customerId ? { ...c, pin: newPin } : c));
@@ -564,14 +1145,13 @@ export function getUserAccounts(): UserAccount[] {
     return next;
   });
 
-  // Merge any missing default accounts by username without overwriting existing edits/passwords
   const existingUsernames = new Set(normalized.map((u) => u.username.toLowerCase()));
   const missingDefaults = defaultUserAccounts.filter(
     (def) => !existingUsernames.has(def.username.toLowerCase())
   );
   if (missingDefaults.length > 0 || didMigrate) {
     const merged = [...normalized, ...missingDefaults];
-    saveToStorage(STORAGE_KEYS.USER_ACCOUNTS, merged);
+    saveToStorage(STORAGE_KEYS.USER_ACCOUNTS, merged, true);
     return merged;
   }
   return normalized;
@@ -602,9 +1182,6 @@ export function updateUserAccount(id: string, updates: Partial<UserAccount>): bo
   return true;
 }
 
-// Administrator-assisted default password reset
-// Uses the last six digits of the registered mobile number as the suggested default password, as requested.
-// Marks mustChangePassword = true, forcing immediate password update on next login.
 export function resetUserPasswordToDefault(userId: string): { tempPin: string; account?: UserAccount } {
   const accounts = getUserAccounts();
   const target = accounts.find((a) => a.id === userId);
@@ -627,12 +1204,9 @@ export function resetUserPasswordToDefault(userId: string): { tempPin: string; a
 
   saveUserAccounts(updatedAccounts);
 
-  // If this user is also a customer, sync their customer pin
   if (target.linkedCustomerId) {
     updateCustomerPin(target.linkedCustomerId, tempPin);
   }
-
-  // If reseller, sync reseller pin
   if (target.linkedResellerCode) {
     const res = getResellers().find((r) => r.referralCode === target.linkedResellerCode);
     if (res) updateResellerPin(res.id, tempPin);
@@ -649,12 +1223,11 @@ export function getLoginFormConfig(): LoginFormConfig {
 }
 
 export function saveLoginFormConfig(config: LoginFormConfig): void {
-  saveToStorage(STORAGE_KEYS.LOGIN_CONFIG, config);
+  saveToStorage(STORAGE_KEYS.LOGIN_CONFIG, config, true);
   const prof = getBusinessProfile();
   prof.loginFormConfig = config;
   saveBusinessProfile(prof);
 }
-
 
 // Calculate Customer Balance and Total Purchases from Transactions
 export function recalculateCustomerBalances(
@@ -668,7 +1241,6 @@ export function recalculateCustomerBalances(
   const lastPaidAmountMap = new Map<string, number>();
   const lastPurchaseDateMap = new Map<string, string>();
 
-  // Sort chronologically to find latest purchase
   const sortedTxs = [...transactions].sort(
     (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
   );
@@ -704,7 +1276,6 @@ export function recalculateCustomerBalances(
   }));
 }
 
-// Reset everything to default demo data
 export function resetToDemoData(): void {
   saveToStorage(STORAGE_KEYS.PROFILE, defaultBusinessProfile);
   saveToStorage(STORAGE_KEYS.CUSTOMERS, defaultCustomers);
@@ -722,10 +1293,9 @@ export function resetToDemoData(): void {
   saveToStorage(STORAGE_KEYS.ATTENDANCE, defaultAttendance);
   saveToStorage(STORAGE_KEYS.RESELLERS, defaultResellers);
   saveToStorage(STORAGE_KEYS.REVIEW_REWARDS, defaultReviewRewards);
-  saveToStorage(STORAGE_KEYS.ACTIVE_ROLE, 'admin');
+  saveToStorage(STORAGE_KEYS.ACTIVE_ROLE, 'admin', true);
 }
 
-// Clear all transactional records to start completely fresh from scratch (0 orders, 0 debt, 0 attendance)
 export function startFromScratchData(): void {
   const profile = getBusinessProfile();
   saveToStorage(STORAGE_KEYS.PROFILE, profile);
@@ -740,7 +1310,7 @@ export function startFromScratchData(): void {
     paymentTermsDays: c.paymentTermsDays || 7,
   }));
   saveToStorage(STORAGE_KEYS.CUSTOMERS, resetCustomers);
-  saveToStorage(STORAGE_KEYS.PRODUCTS, defaultProducts); // Keeps the single demo catalog item
+  saveToStorage(STORAGE_KEYS.PRODUCTS, defaultProducts);
   saveToStorage(STORAGE_KEYS.TRANSACTIONS, []);
   saveToStorage(STORAGE_KEYS.RECURRING, []);
   saveToStorage(STORAGE_KEYS.NOTIFICATIONS, []);
@@ -763,8 +1333,8 @@ export function startFromScratchData(): void {
   }));
   saveToStorage(STORAGE_KEYS.RESELLERS, freshResellers);
   saveToStorage(STORAGE_KEYS.REVIEW_REWARDS, []);
-  saveToStorage(STORAGE_KEYS.ACTIVE_ROLE, 'customer');
-  saveToStorage(STORAGE_KEYS.CURRENT_USER, defaultCustomerUser);
+  saveToStorage(STORAGE_KEYS.ACTIVE_ROLE, 'customer', true);
+  saveToStorage(STORAGE_KEYS.CURRENT_USER, defaultCustomerUser, true);
   saveToStorage(STORAGE_KEYS.LOGIN_AUDITS, defaultLoginAuditLogs);
 }
 
@@ -790,7 +1360,6 @@ export function saveSalespersonReferrals(referrals: SalespersonReferral[]): void
   saveToStorage(STORAGE_KEYS.SP_REFERRALS, referrals);
 }
 
-// COMMISSION FORMULA: PKR 30 per PKR 1,000 qualifying sales (Formula: (Sales / 1000) * 30)
 export function calculateSalespersonCommission(eligibleSalesAmount: number): number {
   if (eligibleSalesAmount < 1000) return 0;
   return Math.floor(eligibleSalesAmount / 1000) * 30;
@@ -916,4 +1485,3 @@ export function importAllDataJSON(jsonStr: string): boolean {
     return false;
   }
 }
-

@@ -7,6 +7,7 @@ import {
   BroadcastContact,
   BusinessProfile,
   CartItem,
+  CategoryRecord,
   CODOrder,
   CODOrderStatus,
   Customer,
@@ -67,9 +68,14 @@ import {
   saveTransactions,
   saveWhatsAppNotifications,
   getCategories,
+  getCategoryRecords,
   saveCategories,
   addCategory,
+  subscribeToServerSync,
+  setSessionToken,
+  apiSubmitCheckoutOrder,
 } from './utils/storage';
+import { isProductPurchaseBlocked } from './utils/locationCategoryHelpers';
 import {
   buildCustomerPaymentReminderMessage,
   buildSaleInvoiceMessage,
@@ -129,6 +135,7 @@ export default function App() {
   // Main Data States
   const [profile, setProfile] = useState<BusinessProfile>(getBusinessProfile);
   const [products, setProducts] = useState<ProductItem[]>(getProducts);
+  const [categoryRecords, setCategoryRecords] = useState<CategoryRecord[]>(getCategoryRecords);
   const [customers, setCustomers] = useState<Customer[]>(() => {
     const rawCusts = getCustomers();
     const rawTxs = getTransactions();
@@ -311,7 +318,7 @@ export default function App() {
     const central = getCategories();
     const fromProds = products.map((p) => p.category?.trim()).filter(Boolean);
     return Array.from(new Set([...central, ...fromProds])).sort((a, b) => a.localeCompare(b));
-  }, [products]);
+  }, [products, categoryRecords]);
 
   // Pending alerts badge count
   const todayStr = new Date().toISOString().split('T')[0];
@@ -323,12 +330,13 @@ export default function App() {
   const cartCount = cart.reduce((acc, it) => acc + it.quantity, 0);
   const cartTotal = cart.reduce((acc, it) => acc + it.unitPrice * it.quantity, 0);
 
-  // Refresh all state from localStorage
-  const handleRefreshAllData = () => {
+  // Refresh all state from central synced store
+  const handleRefreshAllData = useCallback(() => {
     const prof = getBusinessProfile();
     const rawTxs = getTransactions();
     const rawCusts = getCustomers();
     const prods = getProducts();
+    const catRecs = getCategoryRecords();
     const recs = getRecurringInvoices();
     const notifs = getWhatsAppNotifications();
     const tpls = getReminderTemplates();
@@ -345,6 +353,7 @@ export default function App() {
 
     setProfile(prof);
     setProducts(prods);
+    setCategoryRecords(catRecs);
     setCustomers(balanced);
     setTransactions(rawTxs);
     setRecurringInvoices(recs);
@@ -364,7 +373,14 @@ export default function App() {
     setActiveRole(actRole);
     setCurrentUser(curUser);
     setViewMode(actRole === 'customer' ? 'customer' : 'merchant');
-  };
+  }, []);
+
+  // Live Cross-Device Server Sync (SSE + focus + polling fallback)
+  useEffect(() => {
+    return subscribeToServerSync(() => {
+      handleRefreshAllData();
+    });
+  }, [handleRefreshAllData]);
 
   const handleSaveBroadcastContact = (contact: BroadcastContact) => {
     const exists = broadcastContacts.some((c) => c.id === contact.id);
@@ -389,6 +405,13 @@ export default function App() {
 
   // CART HANDLERS
   const handleAddToCart = (product: ProductItem, qty: number = 1, selectedSize?: string) => {
+    if (isProductPurchaseBlocked(product)) {
+      pushToast(
+        `"${product.name}" is in Upcoming Viral Products | Coming Soon and cannot be added to cart until physical arrival is confirmed.`,
+        'error'
+      );
+      return;
+    }
     const resolvedSize = selectedSize || product.selectedSize || '';
     const productWithSize = resolvedSize ? { ...product, selectedSize: resolvedSize } : product;
     const existing = cart.find(
@@ -457,7 +480,15 @@ export default function App() {
   };
 
   // COMPLETE SALE (Full Payment or Cash on Delivery with Basic Checkout Form)
-  const handleCompleteSale = (saleData: CheckoutSalePayload) => {
+  const handleCompleteSale = async (saleData: CheckoutSalePayload) => {
+    if (cart.some((it) => isProductPurchaseBlocked(it.product))) {
+      pushToast(
+        'Checkout blocked: Upcoming / Coming Soon items cannot be ordered until physical arrival is confirmed.',
+        'error'
+      );
+      return;
+    }
+
     const cleanPhone = saleData.buyerDetails.phone.replace(/\D/g, '');
     let activeCustomers = [...customers];
     let customer =
@@ -475,9 +506,11 @@ export default function App() {
         id: newCustId,
         name: saleData.buyerDetails.name,
         phone: saleData.buyerDetails.phone,
-        city: saleData.buyerDetails.city || 'Lahore',
+        city: saleData.buyerDetails.city || 'Muzaffarabad',
+        area: saleData.buyerDetails.area || saleData.buyerDetails.address,
+        mohalla: saleData.buyerDetails.mohalla,
+        landmark: saleData.buyerDetails.landmark,
         address: saleData.buyerDetails.address,
-        area: saleData.buyerDetails.address,
         customerType: 'individual',
         balance: 0,
         totalPurchases: 0,
@@ -494,6 +527,9 @@ export default function App() {
         ...customer,
         name: saleData.buyerDetails.name || customer.name,
         city: saleData.buyerDetails.city || customer.city,
+        area: saleData.buyerDetails.area || customer.area,
+        mohalla: saleData.buyerDetails.mohalla || customer.mohalla,
+        landmark: saleData.buyerDetails.landmark || customer.landmark,
         address: saleData.buyerDetails.address || customer.address,
       };
       activeCustomers = activeCustomers.map((c) => (c.id === customer!.id ? customer! : c));
@@ -589,43 +625,24 @@ export default function App() {
     };
 
     const updatedTxs = [newTx, ...transactions];
-    syncTransactionsAndBalances(updatedTxs, activeCustomers);
+    const balancedCustomers = recalculateCustomerBalances(activeCustomers, updatedTxs);
+    const balancedCustomer = balancedCustomers.find((c) => c.id === customer!.id) || customer;
 
-    // 2. Decrement Product Stock and Increment Sales Count (summing all variants of same product)
-    const updatedProducts = products.map((p) => {
-      const matchingItems = cart.filter((c) => c.product.id === p.id);
-      if (matchingItems.length > 0) {
-        const totalQty = matchingItems.reduce((sum, c) => sum + c.quantity, 0);
-        const totalRev = matchingItems.reduce((sum, c) => sum + c.totalAmount, 0);
-        const totalProf = matchingItems.reduce(
-          (sum, c) => sum + (c.unitPrice - p.costPrice) * c.quantity,
-          0
-        );
-        return {
-          ...p,
-          stockQty: Math.max(0, p.stockQty - totalQty),
-          salesCount: p.salesCount + totalQty,
-          totalRevenue: p.totalRevenue + totalRev,
-          totalProfit: p.totalProfit + totalProf,
-        };
-      }
-      return p;
-    });
-
-    setProducts(updatedProducts);
-    saveProducts(updatedProducts);
-
-    // 3. If COD sale: Create COD Order in Logistics Hub
-    if (saleData.saleType === 'cod') {
+    // 2. If COD sale: Build COD Order for Logistics Hub
+    let newCODOrder: CODOrder | undefined;
+    if (effectiveSaleType === 'cod') {
       const codTotal = totalAmount + 250;
       const commissionAmount = saleData.resellerCode ? Math.floor(totalAmount / 1000) * 30 : 0;
-      const newCODOrder: CODOrder = {
+      newCODOrder = {
         id: `cod_${Date.now()}`,
         orderNumber: `COD-100D-${Math.floor(100 + Math.random() * 900)}`,
         customerId: customer.id,
         customerName: saleData.buyerDetails.name || customer.name,
         phone: saleData.buyerDetails.phone || customer.phone,
         city: saleData.buyerDetails.city || customer.city || 'Muzaffarabad',
+        area: saleData.buyerDetails.area || customer.area,
+        mohalla: saleData.buyerDetails.mohalla || customer.mohalla,
+        landmark: saleData.buyerDetails.landmark || customer.landmark,
         address: saleData.buyerDetails.address || customer.address || 'Address provided',
         items: txItems,
         subtotal: totalAmount,
@@ -639,10 +656,27 @@ export default function App() {
         notes: saleData.notes,
         createdAt: new Date().toISOString(),
       };
-      const updatedCOD = [newCODOrder, ...codOrders];
-      setCODOrders(updatedCOD);
-      saveCODOrders(updatedCOD);
     }
+
+    const matchedReseller = saleData.resellerCode
+      ? resellers.find((r) => r.referralCode.toLowerCase() === saleData.resellerCode!.toLowerCase())
+      : undefined;
+
+    // 3. Submit atomically to SQLite backend for authoritative stock & city validation + multi-device sync
+    const checkoutResult = await apiSubmitCheckoutOrder({
+      items: cart.map((it) => ({ productId: it.product.id, quantity: it.quantity })),
+      customer: balancedCustomer,
+      transaction: newTx,
+      codOrder: newCODOrder,
+      resellerId: matchedReseller?.id,
+    });
+
+    if (!checkoutResult.ok) {
+      pushToast(checkoutResult.error || 'Checkout validation failed.', 'error');
+      return;
+    }
+
+    handleRefreshAllData();
 
     // 4. Clear Cart & Close Modal
     setCart([]);
@@ -963,6 +997,7 @@ export default function App() {
   };
 
   const handleLogout = () => {
+    setSessionToken(null);
     setActiveRole('customer');
     saveActiveRole('customer');
     setCurrentUser(defaultCustomerUser);
@@ -986,6 +1021,11 @@ export default function App() {
   };
 
   const handleUpdateStock = (productId: string, newStock: number) => {
+    const targetProd = products.find((p) => p.id === productId);
+    if (targetProd && isProductPurchaseBlocked(targetProd) && newStock > 0) {
+      pushToast('Upcoming / Coming Soon items keep 0 stock until physical arrival is confirmed.', 'error');
+      return;
+    }
     const updated = products.map((p) =>
       p.id === productId ? { ...p, stockQty: Math.max(0, newStock) } : p
     );
@@ -1442,6 +1482,7 @@ export default function App() {
         selectedCategory={selectedCategory}
         onCategoryChange={(cat) => setSelectedCategory(cat)}
         categories={allCategories}
+        categoryRecords={categoryRecords}
         profile={profile}
         viewMode={viewMode}
         onToggleViewMode={setViewMode}
@@ -1483,6 +1524,7 @@ export default function App() {
             customers={customers}
             profile={profile}
             cart={cart}
+            categoryRecords={categoryRecords}
             onAddToCart={handleAddToCart}
             onUpdateCartQty={handleUpdateCartQty}
             onRemoveFromCart={handleRemoveFromCart}
@@ -1538,6 +1580,12 @@ export default function App() {
             onLogout={handleLogout}
             onOpenCart={() => setIsCheckoutOpen(true)}
             onNavigateTab={handleTabChange}
+            onUpdateCustomer={(updatedCust) => {
+              const updated = customers.map((c) => (c.id === updatedCust.id ? updatedCust : c));
+              setCustomers(updated);
+              saveCustomers(updated);
+              pushToast('Delivery address updated.', 'success');
+            }}
             onPasswordChanged={() => {
               const updatedUser: AppUser = {
                 ...currentUser,
@@ -1644,6 +1692,9 @@ export default function App() {
           <InventoryView
             products={products}
             profile={profile}
+            currentUser={currentUser}
+            categoryRecords={categoryRecords}
+            onRefreshProducts={handleRefreshAllData}
             onSaveProduct={handleSaveProduct}
             onUpdateStock={handleUpdateStock}
             onToggleWinningItem={handleToggleWinningItem}
@@ -1744,6 +1795,12 @@ export default function App() {
             onOpenAddTransaction={openAddTransaction}
             onOpenScheduleWhatsApp={openScheduleWhatsApp}
             onOpenInvoiceModal={openInvoiceModal}
+            onUpdateCustomer={(updatedCust) => {
+              const updated = customers.map((c) => (c.id === updatedCust.id ? updatedCust : c));
+              setCustomers(updated);
+              saveCustomers(updated);
+              pushToast(`Updated delivery address for ${updatedCust.name}.`, 'success');
+            }}
             onDeleteTransaction={(txId) => {
               setConfirmDialog({
                 title: 'Delete Transaction',
@@ -2088,7 +2145,7 @@ export default function App() {
         onClose={() => setIsCategoryModalOpen(false)}
         products={products}
         onCategoriesUpdated={() => {
-          setProducts(getProducts());
+          handleRefreshAllData();
         }}
       />
 

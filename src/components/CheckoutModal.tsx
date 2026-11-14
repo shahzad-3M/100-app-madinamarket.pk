@@ -18,6 +18,8 @@ import {
 } from 'lucide-react';
 import { AppUser, BusinessProfile, CartItem, Customer, DeliveryCityConfig, PaymentMode, SalePaymentType } from '../types';
 import { defaultDeliveryCities } from '../utils/defaultData';
+import { slugifyId } from '../utils/locationCategoryHelpers';
+import { AddressFieldsGroup } from './AddressFieldsGroup';
 
 export interface CheckoutSalePayload {
   customerId: string;
@@ -25,6 +27,9 @@ export interface CheckoutSalePayload {
     name: string;
     phone: string;
     city: string;
+    area?: string;
+    mohalla?: string;
+    landmark?: string;
     address: string;
   };
   saleType: SalePaymentType;
@@ -112,6 +117,9 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
     () => matchedLoggedCustomer?.phone || (currentUser?.isAuthenticated ? currentUser.phone || '' : '') || ''
   );
   const [buyerCity, setBuyerCity] = useState<string>(defaultActiveCity);
+  const [buyerArea, setBuyerArea] = useState<string>(() => matchedLoggedCustomer?.area || '');
+  const [buyerMohalla, setBuyerMohalla] = useState<string>(() => matchedLoggedCustomer?.mohalla || '');
+  const [buyerLandmark, setBuyerLandmark] = useState<string>(() => matchedLoggedCustomer?.landmark || '');
   const [buyerAddress, setBuyerAddress] = useState<string>(
     () => matchedLoggedCustomer?.address || matchedLoggedCustomer?.area || ''
   );
@@ -159,6 +167,9 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
           (c) => c.name.toLowerCase() === (matchedLoggedCustomer.city || '').toLowerCase()
         );
         setBuyerCity(custCityAllowed && matchedLoggedCustomer.city ? matchedLoggedCustomer.city : defaultActiveCity);
+        setBuyerArea(matchedLoggedCustomer.area || '');
+        setBuyerMohalla(matchedLoggedCustomer.mohalla || '');
+        setBuyerLandmark(matchedLoggedCustomer.landmark || '');
         setBuyerAddress(matchedLoggedCustomer.address || matchedLoggedCustomer.area || '');
       } else {
         setSelectedCustomerId('new_checkout_buyer');
@@ -175,6 +186,9 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
           (c) => c.name.toLowerCase() === (cust.city || '').toLowerCase()
         );
         setBuyerCity(custCityAllowed && cust.city ? cust.city : defaultActiveCity);
+        setBuyerArea(cust.area || '');
+        setBuyerMohalla(cust.mohalla || '');
+        setBuyerLandmark(cust.landmark || '');
         setBuyerAddress(cust.address || cust.area || '');
       }
     } else {
@@ -234,9 +248,13 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
       setNewCityName('');
       return;
     }
-    const updatedCities = [...cityConfigs, { name: trimmed, allowed: true }];
+    const updatedCities = [
+      ...cityConfigs,
+      { id: `${slugifyId('city', trimmed)}_${Date.now().toString(36).slice(-4)}`, name: trimmed, allowed: true, areas: [] },
+    ];
     onSaveProfile({ ...profile, deliveryCities: updatedCities });
     setBuyerCity(trimmed);
+    setBuyerArea('');
     setNewCityName('');
   };
 
@@ -246,6 +264,9 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
       setBuyerName('');
       setBuyerPhone('');
       setBuyerCity(defaultActiveCity);
+      setBuyerArea('');
+      setBuyerMohalla('');
+      setBuyerLandmark('');
       setBuyerAddress('');
     } else {
       const cust = customers.find((c) => c.id === val);
@@ -256,6 +277,9 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
           (c) => c.name.toLowerCase() === (cust.city || '').toLowerCase()
         );
         setBuyerCity(custCityAllowed && cust.city ? cust.city : defaultActiveCity);
+        setBuyerArea(cust.area || '');
+        setBuyerMohalla(cust.mohalla || '');
+        setBuyerLandmark(cust.landmark || '');
         setBuyerAddress(cust.address || cust.area || '');
       }
     }
@@ -294,6 +318,9 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
         name: buyerName.trim(),
         phone: buyerPhone.trim(),
         city: buyerCity.trim() || defaultActiveCity,
+        area: buyerArea.trim() || undefined,
+        mohalla: buyerMohalla.trim() || undefined,
+        landmark: buyerLandmark.trim() || undefined,
         address: buyerAddress.trim() || 'Counter Pickup / Direct Delivery',
       },
       saleType: effectiveSaleType,
@@ -409,61 +436,48 @@ export const CheckoutModal: React.FC<CheckoutModalProps> = ({
               </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-              <div>
-                <div className="flex items-center justify-between mb-1">
-                  <label className="font-bold text-slate-700 dark:text-slate-300 block">
-                    Delivery City *
-                  </label>
-                  {canManageCities && (
-                    <button
-                      type="button"
-                      onClick={() => setShowCityManager(!showCityManager)}
-                      className="text-[10px] font-bold text-amber-700 dark:text-amber-400 hover:underline flex items-center gap-0.5 cursor-pointer"
-                    >
-                      <Settings2 className="w-3 h-3" />
-                      <span>{showCityManager ? 'Hide Cities' : 'Cities Setup'}</span>
-                    </button>
-                  )}
-                </div>
-                {allowedCities.length > 0 ? (
-                  <select
-                    value={allowedCities.some((c) => c.name === buyerCity) ? buyerCity : defaultActiveCity}
-                    onChange={(e) => setBuyerCity(e.target.value)}
-                    className="w-full px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-semibold focus:ring-2 focus:ring-amber-400 focus:outline-hidden cursor-pointer"
-                  >
-                    {allowedCities.map((city) => (
-                      <option key={city.name} value={city.name}>
-                        {city.name} {city.name === 'Muzaffarabad' ? '(Default Active)' : ''}
-                      </option>
-                    ))}
-                  </select>
-                ) : (
-                  <div className="px-3 py-2 rounded-lg border border-red-300 bg-red-50 text-red-700 text-[11px] font-semibold">
-                    Delivery paused for all cities
-                  </div>
-                )}
-                <span className="text-[10px] text-emerald-700 dark:text-emerald-400 font-medium block mt-1">
+            <div className="space-y-2.5">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] text-emerald-700 dark:text-emerald-400 font-medium">
                   ✓ {allowedCities.length} active delivery {allowedCities.length === 1 ? 'city' : 'cities'} (Default: Muzaffarabad)
                 </span>
+                {canManageCities && (
+                  <button
+                    type="button"
+                    onClick={() => setShowCityManager(!showCityManager)}
+                    className="text-[10px] font-bold text-amber-700 dark:text-amber-400 hover:underline flex items-center gap-0.5 cursor-pointer"
+                  >
+                    <Settings2 className="w-3 h-3" />
+                    <span>{showCityManager ? 'Hide Cities' : 'Cities Setup'}</span>
+                  </button>
+                )}
               </div>
 
-              <div className="sm:col-span-2">
-                <label className="font-bold text-slate-700 dark:text-slate-300 block mb-1">
-                  Complete Delivery Address *
-                </label>
-                <div className="relative">
-                  <MapPin className="w-3.5 h-3.5 absolute left-3 top-2.5 text-slate-400" />
-                  <input
-                    type="text"
-                    required={saleType === 'cod'}
-                    value={buyerAddress}
-                    onChange={(e) => setBuyerAddress(e.target.value)}
-                    placeholder="House / Shop #, Street, Sector / Town, Landmark"
-                    className="w-full pl-8 pr-3 py-2 rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white focus:ring-2 focus:ring-amber-400 focus:outline-hidden"
-                  />
+              {allowedCities.length > 0 ? (
+                <AddressFieldsGroup
+                  cities={cityConfigs}
+                  city={allowedCities.some((c) => c.name === buyerCity) ? buyerCity : defaultActiveCity}
+                  area={buyerArea}
+                  mohalla={buyerMohalla}
+                  landmark={buyerLandmark}
+                  address={buyerAddress}
+                  filterActiveCitiesOnly={true}
+                  showCompleteAddress={true}
+                  required={saleType === 'cod'}
+                  compact={true}
+                  onChange={(patch) => {
+                    if (patch.city !== undefined) setBuyerCity(patch.city);
+                    if (patch.area !== undefined) setBuyerArea(patch.area);
+                    if (patch.mohalla !== undefined) setBuyerMohalla(patch.mohalla);
+                    if (patch.landmark !== undefined) setBuyerLandmark(patch.landmark);
+                    if (patch.address !== undefined) setBuyerAddress(patch.address);
+                  }}
+                />
+              ) : (
+                <div className="px-3 py-2 rounded-lg border border-red-300 bg-red-50 text-red-700 text-[11px] font-semibold">
+                  Delivery paused for all cities. Please enable at least one city in settings.
                 </div>
-              </div>
+              )}
             </div>
 
             {/* Admin / Manager City Checkmark Allow/Disallow & Reset Panel */}

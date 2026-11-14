@@ -16,8 +16,10 @@ export interface Customer {
   phone: string;
   email?: string;
   address?: string;
-  city?: string; // Area / City for broadcast segmentation
-  area?: string;
+  city?: string; // City for delivery & segmentation
+  area?: string; // Area / Sector within city
+  mohalla?: string; // Mohalla / Neighborhood
+  landmark?: string; // Nearby Landmark
   gender?: GenderType;
   ageGroup?: AgeGroupType;
   ntnNumber?: string; // National Tax Number in Pakistan
@@ -104,7 +106,14 @@ export interface ProductItem {
   urduName?: string;
   category: string;
   parentCategoryId?: string;
+  subcategoryId?: string;
+  childSubcategoryId?: string;
   isUpcoming?: boolean; // When true: informational / viral product, purchasing disabled ("Coming Soon" badge)
+  upcomingStatus?: 'coming_soon' | 'available';
+  expectedArrivalDate?: string;
+  activatedAt?: string;
+  activatedBy?: string;
+  updatedAt?: string;
   sku: string;
   costPrice: number; // For wholesale profit calculation (hidden in customer view)
   marketPrice: number; // Retail market price (strike-through)
@@ -257,9 +266,17 @@ export interface LoginFormConfig {
   loginInstructions: string;
 }
 
-export interface DeliveryCityConfig {
+export interface DeliveryAreaConfig {
+  id: string;
   name: string;
   allowed: boolean;
+}
+
+export interface DeliveryCityConfig {
+  id?: string;
+  name: string;
+  allowed: boolean;
+  areas?: DeliveryAreaConfig[];
 }
 
 export interface BusinessProfile {
@@ -548,10 +565,26 @@ export interface CategoryRecord {
   id: string;
   name: string;
   urduName?: string;
-  parentCategoryId?: string; // If set, this is a subcategory
+  parentCategoryId?: string; // If set, this is a Level 2 subcategory or Level 3 child subcategory
+  level?: 1 | 2 | 3;
   isUpcoming?: boolean; // When true: informational / viral category
+  isActive?: boolean;
   description?: string;
   displayOrder?: number;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface AdminAuditLog {
+  id: string;
+  action: string;
+  entityType: string;
+  entityId: string;
+  actorId?: string;
+  actorName?: string;
+  actorRole?: string;
+  details?: Record<string, any>;
+  createdAt: string;
 }
 
 // CASH ON DELIVERY (COD) ORDERS MANAGEMENT
@@ -564,6 +597,9 @@ export interface CODOrder {
   customerName: string;
   phone: string;
   city: string;
+  area?: string;
+  mohalla?: string;
+  landmark?: string;
   address: string;
   items: TransactionItem[];
   subtotal: number;

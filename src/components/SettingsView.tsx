@@ -28,6 +28,10 @@ import {
   AlertCircle,
   MapPin,
   Plus,
+  Pencil,
+  ChevronDown,
+  ChevronRight,
+  Database,
 } from 'lucide-react';
 import { BusinessProfile, Customer, DeliveryCityConfig, LoginAuditRecord, Reseller } from '../types';
 import { defaultDeliveryCities } from '../utils/defaultData';
@@ -47,7 +51,14 @@ import {
   saveCustomers,
   getResellers,
   saveResellers,
+  apiAddCity,
+  apiUpdateCity,
+  apiAddCityArea,
+  apiUpdateCityArea,
+  apiDeleteCityArea,
+  apiCreateServerBackup,
 } from '../utils/storage';
+import { ensureCityAreasShape, normalizeTextKey } from '../utils/locationCategoryHelpers';
 import {
   ToastBanner,
   ToastMessage,
@@ -98,6 +109,12 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const [userListNotice, setUserListNotice] = useState<string | null>(null);
   const [revealedPins, setRevealedPins] = useState<Record<string, boolean>>({});
   const [newDeliveryCity, setNewDeliveryCity] = useState('');
+  const [expandedCityId, setExpandedCityId] = useState<string | null>('city_muzaffarabad');
+  const [newAreaInputs, setNewAreaInputs] = useState<Record<string, string>>({});
+  const [editingCityId, setEditingCityId] = useState<string | null>(null);
+  const [editingCityName, setEditingCityName] = useState('');
+  const [editingAreaId, setEditingAreaId] = useState<string | null>(null);
+  const [editingAreaName, setEditingAreaName] = useState('');
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const [confirmDialog, setConfirmDialog] = useState<ConfirmDialogState | null>(null);
   const [inputPrompt, setInputPrompt] = useState<InputPromptState | null>(null);
@@ -110,41 +127,142 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     }, 4500);
   };
 
-  const deliveryCities: DeliveryCityConfig[] =
+  const deliveryCities: DeliveryCityConfig[] = ensureCityAreasShape(
     formData.deliveryCities && formData.deliveryCities.length > 0
       ? formData.deliveryCities
-      : defaultDeliveryCities;
+      : defaultDeliveryCities
+  );
 
-  const handleToggleSettingsCity = (cityName: string) => {
+  const handleToggleSettingsCity = async (city: DeliveryCityConfig) => {
+    const targetId = city.id || city.name;
     const updated = deliveryCities.map((c) =>
-      c.name === cityName ? { ...c, allowed: !c.allowed } : c
+      c.name === city.name ? { ...c, allowed: !c.allowed } : c
     );
     const nextProf = { ...formData, deliveryCities: updated };
     setFormData(nextProf);
     onSaveProfile(nextProf);
+    await apiUpdateCity(targetId, { allowed: !city.allowed });
   };
 
   const handleResetSettingsCities = () => {
-    const fresh = defaultDeliveryCities.map((c) => ({ ...c }));
+    const fresh = ensureCityAreasShape(defaultDeliveryCities);
     const nextProf = { ...formData, deliveryCities: fresh };
     setFormData(nextProf);
     onSaveProfile(nextProf);
     setSavedSuccess(true);
+    pushToast('Default delivery cities & areas restored cleanly.', 'success');
     setTimeout(() => setSavedSuccess(false), 2500);
   };
 
-  const handleAddSettingsCity = () => {
+  const handleAddSettingsCity = async () => {
     const trimmed = newDeliveryCity.trim();
     if (!trimmed) return;
-    if (deliveryCities.some((c) => c.name.toLowerCase() === trimmed.toLowerCase())) {
-      setNewDeliveryCity('');
+    if (deliveryCities.some((c) => normalizeTextKey(c.name) === normalizeTextKey(trimmed))) {
+      pushToast(`City "${trimmed}" already exists.`, 'error');
       return;
     }
-    const updated = [...deliveryCities, { name: trimmed, allowed: true }];
-    const nextProf = { ...formData, deliveryCities: updated };
-    setFormData(nextProf);
-    onSaveProfile(nextProf);
-    setNewDeliveryCity('');
+    const res = await apiAddCity(trimmed, true);
+    if (res.ok && res.cities) {
+      const nextProf = { ...formData, deliveryCities: res.cities };
+      setFormData(nextProf);
+      onSaveProfile(nextProf);
+      setNewDeliveryCity('');
+      pushToast(`City "${trimmed}" added and synced across devices.`, 'success');
+    } else {
+      pushToast(res.error || 'Could not add city.', 'error');
+    }
+  };
+
+  const handleSaveCityRename = async (city: DeliveryCityConfig) => {
+    const clean = editingCityName.trim();
+    if (!clean) return;
+    if (
+      deliveryCities.some(
+        (c) => (c.id || c.name) !== (city.id || city.name) && normalizeTextKey(c.name) === normalizeTextKey(clean)
+      )
+    ) {
+      pushToast(`City "${clean}" already exists.`, 'error');
+      return;
+    }
+    const res = await apiUpdateCity(city.id || city.name, { name: clean });
+    if (res.ok && res.cities) {
+      const nextProf = { ...formData, deliveryCities: res.cities };
+      setFormData(nextProf);
+      onSaveProfile(nextProf);
+      setEditingCityId(null);
+      pushToast(`City renamed to "${clean}".`, 'success');
+    } else {
+      pushToast(res.error || 'Could not rename city.', 'error');
+    }
+  };
+
+  const handleAddAreasToCity = async (city: DeliveryCityConfig) => {
+    const cityKey = city.id || city.name;
+    const raw = (newAreaInputs[cityKey] || '').trim();
+    if (!raw) return;
+    const names = raw
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean);
+    let latestCities = deliveryCities;
+    let addedCount = 0;
+
+    for (const areaName of names) {
+      const targetCity = latestCities.find((c) => (c.id || c.name) === cityKey);
+      if (targetCity?.areas?.some((a) => normalizeTextKey(a.name) === normalizeTextKey(areaName))) {
+        pushToast(`Duplicate area "${areaName}" skipped in ${city.name}.`, 'error');
+        continue;
+      }
+      const res = await apiAddCityArea(cityKey, areaName, true);
+      if (res.ok && res.cities) {
+        latestCities = res.cities;
+        addedCount++;
+      } else {
+        pushToast(res.error || `Failed adding area "${areaName}".`, 'error');
+      }
+    }
+
+    if (addedCount > 0) {
+      const nextProf = { ...formData, deliveryCities: latestCities };
+      setFormData(nextProf);
+      onSaveProfile(nextProf);
+      setNewAreaInputs((prev) => ({ ...prev, [cityKey]: '' }));
+      pushToast(`Added ${addedCount} area(s) under ${city.name}.`, 'success');
+    }
+  };
+
+  const handleToggleCityArea = async (city: DeliveryCityConfig, areaId: string, currentAllowed: boolean) => {
+    const res = await apiUpdateCityArea(areaId, { allowed: !currentAllowed });
+    if (res.ok && res.cities) {
+      const nextProf = { ...formData, deliveryCities: res.cities };
+      setFormData(nextProf);
+      onSaveProfile(nextProf);
+    }
+  };
+
+  const handleSaveAreaRename = async (areaId: string) => {
+    const clean = editingAreaName.trim();
+    if (!clean) return;
+    const res = await apiUpdateCityArea(areaId, { name: clean });
+    if (res.ok && res.cities) {
+      const nextProf = { ...formData, deliveryCities: res.cities };
+      setFormData(nextProf);
+      onSaveProfile(nextProf);
+      setEditingAreaId(null);
+      pushToast(`Area updated to "${clean}".`, 'success');
+    } else {
+      pushToast(res.error || 'Could not update area.', 'error');
+    }
+  };
+
+  const handleRemoveArea = async (areaId: string) => {
+    const res = await apiDeleteCityArea(areaId);
+    if (res.ok && res.cities) {
+      const nextProf = { ...formData, deliveryCities: res.cities };
+      setFormData(nextProf);
+      onSaveProfile(nextProf);
+      pushToast('Area removed.', 'info');
+    }
   };
 
   const handleProfileSubmit = (e: React.FormEvent) => {
@@ -968,7 +1086,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             </div>
           </form>
 
-          {/* Delivery Cities Availability & Checkmark Manager */}
+          {/* Delivery Cities & Nested Areas Availability Manager */}
           <div className="mt-6 pt-6 border-t border-slate-200 dark:border-slate-800 space-y-4">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
               <div className="flex items-center gap-2.5">
@@ -977,10 +1095,10 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                 </span>
                 <div>
                   <h4 className="text-sm font-bold text-slate-900 dark:text-white">
-                    Checkout Delivery Cities (Checkmark Allow / Disallow &amp; Reset)
+                    Cities &amp; Areas Management (شہر اور علاقے)
                   </h4>
                   <p className="text-xs text-slate-500 dark:text-slate-400">
-                    Default city: <b>Muzaffarabad</b>. Only checked cities appear in Checkout delivery selection.
+                    Default city: <b>Muzaffarabad</b>. Click any city row to add, edit, or activate/deactivate its nested Areas.
                   </p>
                 </div>
               </div>
@@ -994,43 +1112,236 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               </button>
             </div>
 
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-2">
-              {deliveryCities.map((c) => (
-                <label
-                  key={c.name}
-                  className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-xs cursor-pointer select-none ${
-                    c.allowed
-                      ? 'bg-emerald-50/60 dark:bg-emerald-950/25 border-emerald-200 dark:border-emerald-800 text-slate-900 dark:text-white font-semibold'
-                      : 'bg-slate-50 dark:bg-slate-800/50 border-slate-200 dark:border-slate-700 text-slate-400 line-through'
-                  }`}
-                >
-                  <input
-                    type="checkbox"
-                    checked={c.allowed}
-                    onChange={() => handleToggleSettingsCity(c.name)}
-                    className="w-4 h-4 rounded text-emerald-600 cursor-pointer"
-                  />
-                  <span className="truncate">{c.name}</span>
-                </label>
-              ))}
-            </div>
-
-            <div className="flex items-center gap-2 max-w-sm">
+            {/* Add City Row */}
+            <div className="flex items-center gap-2 max-w-md">
               <input
                 type="text"
                 value={newDeliveryCity}
                 onChange={(e) => setNewDeliveryCity(e.target.value)}
-                placeholder="Add custom delivery city..."
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    void handleAddSettingsCity();
+                  }
+                }}
+                placeholder="Add new city (e.g. Bagh, Kotli, Chakwal)..."
                 className="flex-1 px-3 py-1.5 text-xs rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
               />
               <button
                 type="button"
-                onClick={handleAddSettingsCity}
+                onClick={() => void handleAddSettingsCity()}
                 className="inline-flex items-center gap-1 px-3 py-1.5 text-xs font-bold bg-slate-900 dark:bg-amber-500 text-white dark:text-slate-950 rounded-lg cursor-pointer"
               >
                 <Plus className="w-3.5 h-3.5" />
                 <span>Add City</span>
               </button>
+            </div>
+
+            {/* Cities Accordion with Nested Areas */}
+            <div className="border border-slate-200 dark:border-slate-800 rounded-xl divide-y divide-slate-100 dark:divide-slate-800 overflow-hidden">
+              {deliveryCities.map((c) => {
+                const cityKey = c.id || c.name;
+                const isExpanded = expandedCityId === cityKey;
+                const areas = c.areas || [];
+                const activeAreaCount = areas.filter((a) => a.allowed).length;
+
+                return (
+                  <div key={cityKey} className="bg-white dark:bg-slate-900">
+                    <div className="px-3.5 py-2.5 flex flex-wrap items-center justify-between gap-2 hover:bg-slate-50 dark:hover:bg-slate-800/40">
+                      <div className="flex items-center gap-2.5 min-w-0">
+                        <input
+                          type="checkbox"
+                          checked={c.allowed}
+                          onChange={() => void handleToggleSettingsCity(c)}
+                          className="w-4 h-4 rounded text-emerald-600 cursor-pointer shrink-0"
+                          title={c.allowed ? 'Active for checkout' : 'Disabled for checkout'}
+                        />
+
+                        <button
+                          type="button"
+                          onClick={() => setExpandedCityId(isExpanded ? null : cityKey)}
+                          className="flex items-center gap-1.5 text-left cursor-pointer"
+                        >
+                          {isExpanded ? (
+                            <ChevronDown className="w-4 h-4 text-slate-400" />
+                          ) : (
+                            <ChevronRight className="w-4 h-4 text-slate-400" />
+                          )}
+                          {editingCityId === cityKey ? null : (
+                            <span
+                              className={`text-xs font-bold ${
+                                c.allowed
+                                  ? 'text-slate-900 dark:text-white'
+                                  : 'text-slate-400 line-through'
+                              }`}
+                            >
+                              {c.name}
+                            </span>
+                          )}
+                        </button>
+
+                        {editingCityId === cityKey && (
+                          <div className="flex items-center gap-1.5">
+                            <input
+                              type="text"
+                              value={editingCityName}
+                              onChange={(e) => setEditingCityName(e.target.value)}
+                              className="px-2 py-1 text-xs border border-amber-400 rounded bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
+                            />
+                            <button
+                              type="button"
+                              onClick={() => void handleSaveCityRename(c)}
+                              className="px-2 py-1 text-[11px] font-bold bg-emerald-600 text-white rounded cursor-pointer"
+                            >
+                              Save
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setEditingCityId(null)}
+                              className="px-2 py-1 text-[11px] text-slate-500 hover:underline cursor-pointer"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <span className="text-[11px] font-mono text-slate-500 dark:text-slate-400">
+                          {activeAreaCount}/{areas.length} Areas
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setEditingCityId(cityKey);
+                            setEditingCityName(c.name);
+                          }}
+                          className="p-1 text-slate-400 hover:text-amber-600 cursor-pointer"
+                          title="Edit city name"
+                        >
+                          <Pencil className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setExpandedCityId(isExpanded ? null : cityKey)}
+                          className="px-2 py-1 text-[11px] font-bold bg-slate-100 dark:bg-slate-800 hover:bg-amber-100 dark:hover:bg-amber-950/50 text-slate-700 dark:text-slate-300 rounded cursor-pointer"
+                        >
+                          {isExpanded ? 'Hide Areas' : 'Manage Areas'}
+                        </button>
+                      </div>
+                    </div>
+
+                    {isExpanded && (
+                      <div className="px-4 py-3 bg-slate-50/70 dark:bg-slate-950/40 border-t border-slate-100 dark:border-slate-800 space-y-3">
+                        <div className="flex flex-col sm:flex-row gap-2">
+                          <input
+                            type="text"
+                            value={newAreaInputs[cityKey] || ''}
+                            onChange={(e) =>
+                              setNewAreaInputs((prev) => ({ ...prev, [cityKey]: e.target.value }))
+                            }
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
+                                e.preventDefault();
+                                void handleAddAreasToCity(c);
+                              }
+                            }}
+                            placeholder={`Add area(s) in ${c.name} (comma-separated allowed, e.g. Chattar, Plate, Gojra)`}
+                            className="flex-1 px-3 py-1.5 text-xs rounded-lg border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => void handleAddAreasToCity(c)}
+                            className="inline-flex items-center justify-center gap-1 px-3 py-1.5 text-xs font-bold bg-amber-500 hover:bg-amber-400 text-slate-950 rounded-lg cursor-pointer shrink-0"
+                          >
+                            <Plus className="w-3.5 h-3.5" />
+                            <span>Add Area(s)</span>
+                          </button>
+                        </div>
+
+                        {areas.length === 0 ? (
+                          <p className="text-[11px] text-slate-400">
+                            No predefined areas yet for {c.name}. Add areas above so customers can pick from a dropdown.
+                          </p>
+                        ) : (
+                          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+                            {areas.map((area) => (
+                              <div
+                                key={area.id}
+                                className={`flex items-center justify-between gap-2 px-2.5 py-1.5 rounded-lg border text-xs ${
+                                  area.allowed
+                                    ? 'bg-white dark:bg-slate-900 border-emerald-200 dark:border-emerald-800/60'
+                                    : 'bg-slate-100 dark:bg-slate-800/50 border-slate-200 dark:border-slate-700 opacity-70'
+                                }`}
+                              >
+                                <div className="flex items-center gap-2 min-w-0 flex-1">
+                                  <input
+                                    type="checkbox"
+                                    checked={area.allowed}
+                                    onChange={() =>
+                                      void handleToggleCityArea(c, area.id, area.allowed)
+                                    }
+                                    className="w-3.5 h-3.5 rounded text-emerald-600 cursor-pointer shrink-0"
+                                  />
+                                  {editingAreaId === area.id ? (
+                                    <div className="flex items-center gap-1 flex-1">
+                                      <input
+                                        type="text"
+                                        value={editingAreaName}
+                                        onChange={(e) => setEditingAreaName(e.target.value)}
+                                        className="w-full px-1.5 py-0.5 text-xs border border-amber-400 rounded bg-white dark:bg-slate-800"
+                                      />
+                                      <button
+                                        type="button"
+                                        onClick={() => void handleSaveAreaRename(area.id)}
+                                        className="px-1.5 py-0.5 text-[10px] font-bold bg-emerald-600 text-white rounded cursor-pointer"
+                                      >
+                                        OK
+                                      </button>
+                                    </div>
+                                  ) : (
+                                    <span
+                                      className={`truncate font-medium ${
+                                        area.allowed
+                                          ? 'text-slate-800 dark:text-slate-200'
+                                          : 'text-slate-400 line-through'
+                                      }`}
+                                    >
+                                      {area.name}
+                                    </span>
+                                  )}
+                                </div>
+
+                                <div className="flex items-center gap-1 shrink-0">
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setEditingAreaId(area.id);
+                                      setEditingAreaName(area.name);
+                                    }}
+                                    className="p-1 text-slate-400 hover:text-amber-600 cursor-pointer"
+                                    title="Edit area"
+                                  >
+                                    <Pencil className="w-3 h-3" />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => void handleRemoveArea(area.id)}
+                                    className="p-1 text-slate-400 hover:text-red-600 cursor-pointer"
+                                    title="Remove area"
+                                  >
+                                    <Trash2 className="w-3 h-3" />
+                                  </button>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           </div>
         </div>
@@ -1521,6 +1832,21 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           </div>
 
           <div className="flex flex-wrap items-center gap-3">
+            <button
+              onClick={async () => {
+                const res = await apiCreateServerBackup('manual_settings');
+                if (res.ok) {
+                  pushToast('Verified SQLite server backup snapshot created in /data/backups.', 'success');
+                } else {
+                  pushToast(res.error || 'Server backup failed.', 'error');
+                }
+              }}
+              className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-emerald-700 dark:text-emerald-300 bg-emerald-50 dark:bg-emerald-950/60 hover:bg-emerald-100 dark:hover:bg-emerald-900/60 border border-emerald-200 dark:border-emerald-800 rounded-lg cursor-pointer shadow-xs"
+            >
+              <Database className="w-3.5 h-3.5" />
+              Create Verified Server SQLite Backup
+            </button>
+
             <button
               onClick={handleExportBackup}
               className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold text-slate-700 dark:text-slate-200 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 rounded-lg cursor-pointer shadow-xs"

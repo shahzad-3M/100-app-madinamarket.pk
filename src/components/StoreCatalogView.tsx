@@ -24,16 +24,26 @@ import {
   Download,
   Phone,
   FolderTree,
+  ChevronDown,
 } from 'lucide-react';
-import { BusinessProfile, CartItem, Customer, ProductItem } from '../types';
+import { BusinessProfile, CartItem, CategoryRecord, Customer, ProductItem } from '../types';
 import { ProductDetailsModal } from './ProductDetailsModal';
 import { openWhatsAppDirect } from '../utils/whatsapp';
+import { getCategoryRecords } from '../utils/storage';
+import {
+  UPCOMING_CATEGORY_ID,
+  UPCOMING_CATEGORY_NAME,
+  doesProductMatchCategoryFilter,
+  isProductPurchaseBlocked,
+  normalizeTextKey,
+} from '../utils/locationCategoryHelpers';
 
 interface StoreCatalogViewProps {
   products: ProductItem[];
   customers: Customer[];
   profile: BusinessProfile;
   cart: CartItem[];
+  categoryRecords?: CategoryRecord[];
   onAddToCart: (product: ProductItem, qty?: number) => void;
   onUpdateCartQty: (productId: string, qty: number) => void;
   onRemoveFromCart: (productId: string) => void;
@@ -55,6 +65,7 @@ export const StoreCatalogView: React.FC<StoreCatalogViewProps> = ({
   customers,
   profile,
   cart,
+  categoryRecords,
   onAddToCart,
   onUpdateCartQty,
   onRemoveFromCart,
@@ -76,19 +87,67 @@ export const StoreCatalogView: React.FC<StoreCatalogViewProps> = ({
   const [selectedDetailProduct, setSelectedDetailProduct] = useState<ProductItem | null>(null);
   const [isMobileFilterOpen, setIsMobileFilterOpen] = useState(false);
   const [isConfirmClearCartOpen, setIsConfirmClearCartOpen] = useState(false);
+  const [expandedSidebarCats, setExpandedSidebarCats] = useState<Record<string, boolean>>({});
 
-  // DYNAMIC CATEGORIES: Strictly only categories present or imported from website (User directive)
-  const dynamicCategories = useMemo(() => {
-    const countsMap = new Map<string, number>();
+  const effectiveCatRecords = useMemo(
+    () => (categoryRecords && categoryRecords.length > 0 ? categoryRecords : getCategoryRecords()),
+    [categoryRecords]
+  );
+
+  // Upcoming product count (always visible category even if 0)
+  const upcomingCount = useMemo(
+    () => products.filter((p) => isProductPurchaseBlocked(p)).length,
+    [products]
+  );
+
+  // Build 3-level Category Tree + uncategorized legacy fallback categories
+  const activeCatRecords = useMemo(
+    () =>
+      effectiveCatRecords.filter(
+        (c) => c.isActive !== false && !c.isUpcoming && c.id !== UPCOMING_CATEGORY_ID
+      ),
+    [effectiveCatRecords]
+  );
+
+  const mainCategoryNodes = useMemo(
+    () => activeCatRecords.filter((c) => !c.parentCategoryId),
+    [activeCatRecords]
+  );
+
+  const unmappedProductCategories = useMemo(() => {
+    const extra: Array<{ name: string; count: number }> = [];
+    const seen = new Set<string>();
     products.forEach((p) => {
-      const cat = p.category ? p.category.trim() : 'General';
-      countsMap.set(cat, (countsMap.get(cat) || 0) + 1);
+      if (isProductPurchaseBlocked(p)) return;
+      const topName = (p.category || '').split('>')[0]?.trim();
+      if (!topName) return;
+      const matchesManaged = activeCatRecords.some(
+        (c) => normalizeTextKey(c.name) === normalizeTextKey(topName)
+      );
+      if (!matchesManaged && !seen.has(normalizeTextKey(topName))) {
+        seen.add(normalizeTextKey(topName));
+        extra.push({
+          name: topName,
+          count: products.filter((pr) => normalizeTextKey(pr.category) === normalizeTextKey(p.category)).length,
+        });
+      }
     });
-    return Array.from(countsMap.entries()).map(([name, count]) => ({
-      name,
-      count,
-    }));
-  }, [products]);
+    return extra;
+  }, [products, activeCatRecords]);
+
+  // Active subcategories / child chips for current selection
+  const selectedCatObj = useMemo(
+    () =>
+      effectiveCatRecords.find(
+        (c) => c.id === selectedCategory || normalizeTextKey(c.name) === normalizeTextKey(selectedCategory)
+      ),
+    [effectiveCatRecords, selectedCategory]
+  );
+
+  const selectedCatChildren = useMemo(() => {
+    if (!selectedCatObj || selectedCatObj.isUpcoming) return [];
+    return activeCatRecords.filter((c) => c.parentCategoryId === selectedCatObj.id);
+  }, [activeCatRecords, selectedCatObj]);
 
   // Cart calculations
   const totalCartItems = cart.reduce((acc, it) => acc + it.quantity, 0);
@@ -100,12 +159,10 @@ export const StoreCatalogView: React.FC<StoreCatalogViewProps> = ({
   const filteredProducts = useMemo(() => {
     return products
       .filter((p) => {
-        // Category filter (support robust matching)
         if (selectedCategory && selectedCategory !== 'All Categories' && selectedCategory !== 'For you') {
-          const sel = selectedCategory.trim().toLowerCase();
-          const pCat = (p.category || '').trim().toLowerCase();
-          const matchCat = pCat === sel || pCat.includes(sel) || sel.includes(pCat);
-          if (!matchCat) return false;
+          if (!doesProductMatchCategoryFilter(p, selectedCategory, effectiveCatRecords)) {
+            return false;
+          }
         }
 
         // Winning items toggle
@@ -142,7 +199,7 @@ export const StoreCatalogView: React.FC<StoreCatalogViewProps> = ({
         }
         return 0;
       });
-  }, [products, selectedCategory, searchQuery, sortBy, showWinningOnly]);
+  }, [products, selectedCategory, searchQuery, sortBy, showWinningOnly, effectiveCatRecords]);
 
   return (
     <div className="space-y-6">
@@ -227,8 +284,8 @@ export const StoreCatalogView: React.FC<StoreCatalogViewProps> = ({
             </button>
           )}
 
-          {/* Dynamic Categories List from products */}
-          <nav className="space-y-0.5 text-xs">
+          {/* 3-Level Category Hierarchy + Always-Visible Upcoming Category */}
+          <nav className="space-y-1 text-xs">
             <button
               onClick={() => onCategoryChange('All Categories')}
               className={`w-full flex items-center justify-between py-1.5 px-2 rounded-lg text-left transition-colors cursor-pointer ${
@@ -243,25 +300,160 @@ export const StoreCatalogView: React.FC<StoreCatalogViewProps> = ({
               </span>
             </button>
 
-            {dynamicCategories.map((cat) => {
-              const isSelected = selectedCategory === cat.name;
+            {/* Always-Visible Dedicated Upcoming Viral Products | Coming Soon Category */}
+            <button
+              onClick={() => onCategoryChange(UPCOMING_CATEGORY_NAME)}
+              className={`w-full flex items-center justify-between py-1.5 px-2 rounded-lg text-left transition-colors cursor-pointer ${
+                selectedCategory === UPCOMING_CATEGORY_NAME || selectedCategory === UPCOMING_CATEGORY_ID
+                  ? 'bg-purple-100 dark:bg-purple-950/60 text-purple-950 dark:text-purple-100 font-bold border-l-3 border-purple-500'
+                  : 'bg-purple-50/60 dark:bg-purple-950/20 text-purple-800 dark:text-purple-300 hover:bg-purple-100/70 dark:hover:bg-purple-950/40'
+              }`}
+            >
+              <span className="truncate flex items-center gap-1 font-semibold">
+                <Sparkles className="w-3 h-3 text-purple-500 shrink-0" />
+                <span className="truncate">{UPCOMING_CATEGORY_NAME}</span>
+              </span>
+              <span className="text-[10px] font-mono px-1.5 py-0.2 rounded bg-purple-200/70 dark:bg-purple-900/60 text-purple-900 dark:text-purple-200 shrink-0">
+                {upcomingCount}
+              </span>
+            </button>
+
+            {/* Level 1 -> Level 2 -> Level 3 Categories */}
+            {mainCategoryNodes.map((mainCat) => {
+              const subs = activeCatRecords.filter((c) => c.parentCategoryId === mainCat.id);
+              const count = products.filter((p) =>
+                doesProductMatchCategoryFilter(p, mainCat.name, effectiveCatRecords)
+              ).length;
+              const isSelected =
+                normalizeTextKey(selectedCategory) === normalizeTextKey(mainCat.name) ||
+                selectedCategory === mainCat.id;
+              const isExpanded = Boolean(expandedSidebarCats[mainCat.id] || isSelected);
+
               return (
-                <button
-                  key={cat.name}
-                  onClick={() => onCategoryChange(cat.name)}
-                  className={`w-full flex items-center justify-between py-1.5 px-2 rounded-lg text-left transition-colors cursor-pointer ${
-                    isSelected
-                      ? 'bg-[#FFD200]/20 text-slate-950 dark:text-white font-bold border-l-3 border-[#FFD200]'
-                      : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800/50'
-                  }`}
-                >
-                  <span className="truncate">{cat.name}</span>
-                  <span className="text-[11px] text-slate-400 font-mono">
-                    ({cat.count})
-                  </span>
-                </button>
+                <div key={mainCat.id} className="space-y-0.5">
+                  <div className="flex items-center gap-0.5">
+                    {subs.length > 0 && (
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setExpandedSidebarCats((prev) => ({
+                            ...prev,
+                            [mainCat.id]: !isExpanded,
+                          }))
+                        }
+                        className="p-1 text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 cursor-pointer shrink-0"
+                        aria-label="Toggle subcategories"
+                      >
+                        {isExpanded ? (
+                          <ChevronDown className="w-3 h-3" />
+                        ) : (
+                          <ChevronRight className="w-3 h-3" />
+                        )}
+                      </button>
+                    )}
+                    <button
+                      onClick={() => {
+                        onCategoryChange(mainCat.name);
+                        if (subs.length > 0) {
+                          setExpandedSidebarCats((prev) => ({ ...prev, [mainCat.id]: true }));
+                        }
+                      }}
+                      className={`flex-1 flex items-center justify-between py-1.5 px-2 rounded-lg text-left transition-colors cursor-pointer min-w-0 ${
+                        isSelected
+                          ? 'bg-[#FFD200]/20 text-slate-950 dark:text-white font-bold border-l-3 border-[#FFD200]'
+                          : 'text-slate-700 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800/50'
+                      }`}
+                    >
+                      <span className="truncate">{mainCat.name}</span>
+                      <span className="text-[11px] text-slate-400 font-mono shrink-0">
+                        ({count})
+                      </span>
+                    </button>
+                  </div>
+
+                  {/* Level 2 Subcategories */}
+                  {isExpanded && subs.length > 0 && (
+                    <div className="pl-4 border-l border-slate-200 dark:border-slate-800 ml-2 space-y-0.5">
+                      {subs.map((sub) => {
+                        const childCats = activeCatRecords.filter((c) => c.parentCategoryId === sub.id);
+                        const subCount = products.filter((p) =>
+                          doesProductMatchCategoryFilter(p, sub.name, effectiveCatRecords)
+                        ).length;
+                        const isSubSelected =
+                          normalizeTextKey(selectedCategory) === normalizeTextKey(sub.name) ||
+                          selectedCategory === sub.id;
+
+                        return (
+                          <div key={sub.id} className="space-y-0.5">
+                            <button
+                              onClick={() => onCategoryChange(sub.name)}
+                              className={`w-full flex items-center justify-between py-1 px-2 rounded-md text-left text-[11px] transition-colors cursor-pointer ${
+                                isSubSelected
+                                  ? 'bg-amber-100/80 dark:bg-amber-950/50 text-amber-950 dark:text-amber-200 font-bold'
+                                  : 'text-slate-600 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-800/40'
+                              }`}
+                            >
+                              <span className="truncate">└ {sub.name}</span>
+                              <span className="text-[10px] text-slate-400 font-mono shrink-0">
+                                ({subCount})
+                              </span>
+                            </button>
+
+                            {/* Level 3 Child Subcategories */}
+                            {childCats.length > 0 && (
+                              <div className="pl-3 space-y-0.5">
+                                {childCats.map((ch) => {
+                                  const chCount = products.filter((p) =>
+                                    doesProductMatchCategoryFilter(p, ch.name, effectiveCatRecords)
+                                  ).length;
+                                  const isChSelected =
+                                    normalizeTextKey(selectedCategory) === normalizeTextKey(ch.name) ||
+                                    selectedCategory === ch.id;
+                                  return (
+                                    <button
+                                      key={ch.id}
+                                      onClick={() => onCategoryChange(ch.name)}
+                                      className={`w-full flex items-center justify-between py-0.5 px-2 rounded text-left text-[10px] transition-colors cursor-pointer ${
+                                        isChSelected
+                                          ? 'bg-amber-200/70 dark:bg-amber-900/50 text-amber-950 dark:text-amber-100 font-bold'
+                                          : 'text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200'
+                                      }`}
+                                    >
+                                      <span className="truncate">• {ch.name}</span>
+                                      <span className="text-[9px] text-slate-400 font-mono shrink-0">
+                                        ({chCount})
+                                      </span>
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
               );
             })}
+
+            {/* Legacy / Custom Unmapped Categories from Existing Products */}
+            {unmappedProductCategories.map((cat) => (
+              <button
+                key={cat.name}
+                onClick={() => onCategoryChange(cat.name)}
+                className={`w-full flex items-center justify-between py-1.5 px-2 rounded-lg text-left transition-colors cursor-pointer ${
+                  selectedCategory === cat.name
+                    ? 'bg-[#FFD200]/20 text-slate-950 dark:text-white font-bold border-l-3 border-[#FFD200]'
+                    : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800/50'
+                }`}
+              >
+                <span className="truncate">{cat.name}</span>
+                <span className="text-[11px] text-slate-400 font-mono">
+                  ({cat.count})
+                </span>
+              </button>
+            ))}
           </nav>
 
           {/* Quick Import from Website Button in Sidebar (USER DIRECTIVE: keep only visible import from website link for super admin hide for others) */}
@@ -363,12 +555,32 @@ export const StoreCatalogView: React.FC<StoreCatalogViewProps> = ({
             </div>
           </div>
 
+          {/* Subcategory Quick Chips when a parent category is selected */}
+          {selectedCatChildren.length > 0 && (
+            <div className="flex flex-wrap items-center gap-1.5 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-xl p-2.5 shadow-2xs">
+              <span className="text-[10px] font-bold uppercase text-slate-400 mr-1">
+                Subcategories:
+              </span>
+              {selectedCatChildren.map((child) => (
+                <button
+                  key={child.id}
+                  type="button"
+                  onClick={() => onCategoryChange(child.name)}
+                  className="px-2.5 py-1 rounded-full bg-slate-100 dark:bg-slate-800 hover:bg-[#FFD200] hover:text-slate-950 text-slate-700 dark:text-slate-200 text-[11px] font-semibold transition-colors cursor-pointer"
+                >
+                  {child.name}
+                </button>
+              ))}
+            </div>
+          )}
+
           {/* PRODUCT CARDS GRID (USER DIRECTIVE: Strictly 2 products in row on mobile, 3 on tablet, 4 on desktop, 5 on xl) */}
           <div className="grid grid-cols-2 gap-2 sm:gap-3.5 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-5">
             {filteredProducts.map((product) => {
               const savings = product.marketPrice - product.ourPrice;
-              const savingsPercent = Math.round((savings / product.marketPrice) * 100);
+              const savingsPercent = product.marketPrice > 0 ? Math.round((savings / product.marketPrice) * 100) : 0;
               const inCart = cart.find((it) => it.product.id === product.id);
+              const isUpcomingBlocked = isProductPurchaseBlocked(product);
 
               return (
                 <div
@@ -396,7 +608,7 @@ export const StoreCatalogView: React.FC<StoreCatalogViewProps> = ({
 
                     {/* Discount or Upcoming Badge */}
                     <div className="absolute top-1.5 left-1.5 sm:top-2 sm:left-2 flex flex-col gap-1 items-start">
-                      {product.isUpcoming ? (
+                      {isUpcomingBlocked ? (
                         <span className="bg-purple-600 text-white font-extrabold text-[9px] sm:text-[10px] px-1.5 sm:px-2 py-0.5 rounded shadow-xs">
                           COMING SOON
                         </span>
@@ -415,13 +627,13 @@ export const StoreCatalogView: React.FC<StoreCatalogViewProps> = ({
                     {/* Stock Alert Badge */}
                     <div className="absolute top-1.5 right-1.5 sm:top-2 sm:right-2">
                       <span className={`text-[8px] sm:text-[10px] font-mono px-1.5 sm:px-2 py-0.5 rounded font-bold ${
-                        product.isUpcoming
+                        isUpcomingBlocked
                           ? 'bg-purple-900/90 text-white'
                           : product.stockQty <= product.minStockAlert
                           ? 'bg-red-500 text-white'
                           : 'bg-slate-900/80 text-white backdrop-blur-xs'
                       }`}>
-                        {product.isUpcoming ? 'Under Transit' : `${product.stockQty} in stock`}
+                        {isUpcomingBlocked ? 'Expected Soon' : `${product.stockQty} in stock`}
                       </span>
                     </div>
                   </div>
@@ -517,30 +729,33 @@ export const StoreCatalogView: React.FC<StoreCatalogViewProps> = ({
                       </a>
                     )}
 
-                    {/* Action Bar: Add to Cart / WhatsApp Ordering Options (WhatsApp hidden in Customer View) */}
+                    {/* Action Bar: Add to Cart / WhatsApp Ordering Options */}
                     <div className="pt-0.5 space-y-1">
-                      {product.isUpcoming ? (
+                      {isUpcomingBlocked && product.expectedArrivalDate && (
+                        <div className="text-[10px] font-semibold text-purple-700 dark:text-purple-300 bg-purple-50 dark:bg-purple-950/30 px-2 py-0.5 rounded text-center truncate">
+                          Arrival: {product.expectedArrivalDate}
+                        </div>
+                      )}
+                      {isUpcomingBlocked ? (
                         <div className="flex items-center gap-1">
                           <button
                             type="button"
                             disabled
                             className="flex-1 py-1.5 px-2 bg-slate-200 dark:bg-slate-800 text-slate-500 dark:text-slate-400 text-[10px] sm:text-[11px] font-bold rounded-lg cursor-not-allowed text-center truncate"
                           >
-                            Coming Soon
+                            Coming Soon · View Only
                           </button>
-                          {!isCustomerView && (
-                            <button
-                              type="button"
-                              onClick={() => {
-                                const text = `السلام علیکم! میں *${product.name}* کے بارے میں معلومات اور لاٹ بکنگ کروانا چاہتا ہوں۔`;
-                                openWhatsAppDirect(product.investorWhatsApp || profile.phone || '03125256266', text);
-                              }}
-                              className="p-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg cursor-pointer transition-colors shadow-2xs"
-                              title="Enquire on WhatsApp"
-                            >
-                              <Phone className="w-3.5 h-3.5" />
-                            </button>
-                          )}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const text = `السلام علیکم! میں *${product.name}* (Coming Soon) کے بارے میں معلومات اور آمد کی تفصیل معلوم کرنا چاہتا ہوں۔`;
+                              openWhatsAppDirect(product.investorWhatsApp || profile.phone || '03125256266', text);
+                            }}
+                            className="p-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg cursor-pointer transition-colors shadow-2xs"
+                            title="WhatsApp Inquiry"
+                          >
+                            <Phone className="w-3.5 h-3.5" />
+                          </button>
                         </div>
                       ) : (
                         <div className="flex items-center gap-1">

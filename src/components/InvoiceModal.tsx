@@ -122,7 +122,16 @@ export const InvoiceModal: React.FC<InvoiceModalProps> = ({
               <p className="text-sm font-bold text-slate-900 dark:text-slate-100">
                 {customer.name} {customer.urduName && <span className="font-normal font-sans text-slate-500">({customer.urduName})</span>}
               </p>
-              {customer.address && <p className="text-slate-600 dark:text-slate-400 mt-1">{customer.address}</p>}
+              {(customer.address || customer.mohalla || customer.area || customer.city) && (
+                <p className="text-slate-600 dark:text-slate-400 mt-1">
+                  {[customer.address, customer.mohalla, customer.area, customer.city].filter(Boolean).join(', ')}
+                </p>
+              )}
+              {customer.landmark && (
+                <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                  Nearby Landmark: <b>{customer.landmark}</b>
+                </p>
+              )}
               <p className="text-slate-600 dark:text-slate-400 mt-1">
                 Phone: <span className="font-mono">{customer.phone}</span>
               </p>

@@ -28,8 +28,9 @@ import {
   LogIn,
   LogOut,
 } from 'lucide-react';
-import { AppUser, BusinessProfile, UserRole } from '../types';
+import { AppUser, BusinessProfile, CategoryRecord, UserRole } from '../types';
 import { openWhatsAppDirect } from '../utils/whatsapp';
+import { UPCOMING_CATEGORY_ID, UPCOMING_CATEGORY_NAME } from '../utils/locationCategoryHelpers';
 
 export interface NavItem {
   id: string;
@@ -55,6 +56,7 @@ interface NavbarProps {
   selectedCategory?: string;
   onCategoryChange?: (cat: string) => void;
   categories?: string[];
+  categoryRecords?: CategoryRecord[];
   profile: BusinessProfile;
   viewMode: 'customer' | 'merchant';
   onToggleViewMode: (mode: 'customer' | 'merchant') => void;
@@ -79,6 +81,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   selectedCategory = 'All Categories',
   onCategoryChange,
   categories = [],
+  categoryRecords = [],
   profile,
   viewMode,
   onToggleViewMode,
@@ -227,9 +230,17 @@ export const Navbar: React.FC<NavbarProps> = ({
       ? resellerDropdownItems
       : customerDropdownItems;
 
-  // Deduplicate and filter categories list
+  // Build top categories bar from active Level-1 CategoryRecords + always include Upcoming Viral Products | Coming Soon
+  const topLevelRecordNames = categoryRecords
+    .filter((c) => c.isActive !== false && !c.parentCategoryId && !c.isUpcoming && c.id !== UPCOMING_CATEGORY_ID)
+    .map((c) => c.name.trim())
+    .filter(Boolean);
   const displayCategories = Array.from(
-    new Set(['All Categories', ...categories.filter((c) => c && c !== 'All Categories')])
+    new Set([
+      'All Categories',
+      UPCOMING_CATEGORY_NAME,
+      ...(topLevelRecordNames.length > 0 ? topLevelRecordNames : categories.map((c) => c.split('>')[0].trim())),
+    ].filter((c) => c && c !== 'All'))
   );
 
   return (
